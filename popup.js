@@ -65,8 +65,7 @@
       buttonSingular: "button",
       buttonPlural: "buttons",
       stoppingStatus: "Stopping after the current movement...",
-      hiddenPauseStatus: "Paused while the Strava tab is hidden. Keep the Strava tab visible to continue scrolling.",
-      runningStatus: "Kudos sequence is running in the Strava tab.",
+      backgroundStatus: "Kudos sequence is running. You can use other windows while Strava stays open.",
       startStatus: "Starting Strava kudos...",
       loginRequired: "Please log in to Strava, then run this extension again.",
       unableStart: "Unable to start kudos sequence.",
@@ -117,8 +116,7 @@
       buttonSingular: "按钮",
       buttonPlural: "按钮",
       stoppingStatus: "正在完成当前动作后停止...",
-      hiddenPauseStatus: "Strava 标签页隐藏时已暂停。请保持 Strava 标签页可见以继续滚动。",
-      runningStatus: "Kudos 流程正在 Strava 标签页中运行。",
+      backgroundStatus: "Kudos 流程正在运行。保持 Strava 打开后，你可以使用其他窗口。",
       startStatus: "正在启动 Strava kudos...",
       loginRequired: "请先登录 Strava，然后再使用扩展。",
       unableStart: "无法启动 kudos 流程。",
@@ -514,13 +512,8 @@
       return;
     }
 
-    if (isRunning && state.pageHidden) {
-      setStatusKey("hiddenPauseStatus", "busy");
-      return;
-    }
-
     if (isRunning) {
-      setStatusKey("runningStatus", "busy");
+      setStatusKey("backgroundStatus", "busy");
       return;
     }
 

@@ -41,9 +41,8 @@
     maxIdleScrollAttempts: 4,
     maxProcessedButtons: 250
   });
-  const VISIBILITY_PROFILE = Object.freeze({
-    hiddenPoll: { min: 900, max: 1800 },
-    resumeSettle: { min: 700, max: 1400 }
+  const BACKGROUND_DISCOVERY_PROFILE = Object.freeze({
+    hiddenDiscoveryBackoff: { min: 2500, max: 5500 }
   });
 
   const runState = {
@@ -333,23 +332,10 @@
     return document.hidden || document.visibilityState === "hidden";
   }
 
-  async function waitForVisiblePage(metrics) {
-    if (!isPageHidden()) {
-      return true;
-    }
-
-    metrics.hiddenWaits += 1;
+  async function hiddenDiscoveryBackoff(metrics) {
+    metrics.hiddenDiscoveryBackoffs += 1;
     metrics.hiddenSince = metrics.hiddenSince || Date.now();
-
-    while (isPageHidden()) {
-      if (!(await cancellableDelay(VISIBILITY_PROFILE.hiddenPoll))) {
-        return false;
-      }
-    }
-
-    metrics.hiddenResumeCount += 1;
-    metrics.hiddenSince = null;
-    return cancellableDelay(VISIBILITY_PROFILE.resumeSettle);
+    return cancellableDelay(BACKGROUND_DISCOVERY_PROFILE.hiddenDiscoveryBackoff);
   }
 
   function normalizeDateText(text) {
@@ -777,8 +763,7 @@
       discoveryScrolls: 0,
       idleDiscoveryAttempts: 0,
       cappedBySafetyLimit: false,
-      hiddenWaits: 0,
-      hiddenResumeCount: 0,
+      hiddenDiscoveryBackoffs: 0,
       hiddenSince: null,
       delayRangeMs: betweenTargets,
       dateRange,
@@ -808,10 +793,6 @@
       return true;
     }
 
-    if (!(await waitForVisiblePage(metrics))) {
-      return false;
-    }
-
     const dateFilterStatus = dateFilterStatusForButton(button, dateRange);
     if (dateFilterStatus === "out-of-date") {
       metrics.skippedOutOfDate += 1;
@@ -839,10 +820,6 @@
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
       return true;
-    }
-
-    if (!(await waitForVisiblePage(metrics))) {
-      return false;
     }
 
     const settledDateFilterStatus = dateFilterStatusForButton(button, dateRange);
@@ -912,10 +889,6 @@
 
     try {
       while (!runState.cancelRequested) {
-        if (!(await waitForVisiblePage(metrics))) {
-          break;
-        }
-
         if (metrics.scanned >= DISCOVERY_PROFILE.maxProcessedButtons) {
           metrics.cappedBySafetyLimit = true;
           break;
@@ -928,10 +901,24 @@
           }
 
           metrics.discoveryScrolls += 1;
-          await scrollForMoreFeedItems();
+          const madeProgress = await scrollForMoreFeedItems();
           if (runState.cancelRequested) {
             break;
           }
+
+          if (madeProgress) {
+            idleScrollAttempts = 0;
+            metrics.idleDiscoveryAttempts = 0;
+            continue;
+          }
+
+          if (isPageHidden()) {
+            if (!(await hiddenDiscoveryBackoff(metrics))) {
+              break;
+            }
+            continue;
+          }
+
           idleScrollAttempts += 1;
           metrics.idleDiscoveryAttempts = idleScrollAttempts;
           continue;

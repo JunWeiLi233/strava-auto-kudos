@@ -91,6 +91,15 @@
     });
   }
 
+  function setTabAutoDiscardable(tabId, autoDiscardable) {
+    return new Promise((resolve) => {
+      chrome.tabs.update(tabId, { autoDiscardable }, () => {
+        chrome.runtime.lastError;
+        resolve();
+      });
+    });
+  }
+
   function waitForTabComplete(tabId) {
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
@@ -192,6 +201,18 @@
     });
   }
 
+  async function keepRunTabAvailable(tabId) {
+    await setTabAutoDiscardable(tabId, false);
+    await storageSet(ACTIVE_RUN_TAB_KEY, tabId);
+  }
+
+  async function releaseRunTab(tabId) {
+    if (typeof tabId === "number") {
+      await setTabAutoDiscardable(tabId, true);
+    }
+    await storageRemove(ACTIVE_RUN_TAB_KEY);
+  }
+
   async function storedRunTab() {
     const tabId = await storageGet(ACTIVE_RUN_TAB_KEY);
     if (typeof tabId !== "number") {
@@ -275,9 +296,9 @@
 
     const response = await sendContentMessageWithInjection(tab.id, ACTION_STATUS_KUDOS);
     if (response && response.state && response.state.running) {
-      await storageSet(ACTIVE_RUN_TAB_KEY, tab.id);
+      await keepRunTabAvailable(tab.id);
     } else {
-      await storageRemove(ACTIVE_RUN_TAB_KEY);
+      await releaseRunTab(tab.id);
     }
 
     return {
@@ -305,7 +326,7 @@
 
     const response = await sendContentMessageWithInjection(tab.id, ACTION_RUN_KUDOS, settings);
     if (response && (response.started || (response.state && response.state.running))) {
-      await storageSet(ACTIVE_RUN_TAB_KEY, tab.id);
+      await keepRunTabAvailable(tab.id);
     }
 
     return {
@@ -317,7 +338,7 @@
   async function handleStop() {
     const tab = await resolveControlTab();
     if (!tab || typeof tab.id !== "number") {
-      await storageRemove(ACTIVE_RUN_TAB_KEY);
+      await releaseRunTab(null);
       return idleStatus();
     }
 

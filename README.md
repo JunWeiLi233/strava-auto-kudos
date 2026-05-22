@@ -14,7 +14,13 @@ Using automation on Strava may violate Strava's Terms of Service and may create 
 
 If you represent Strava, a rights holder, or any party who believes this repository should be removed, please contact me at any time through GitHub Issues or my GitHub profile. I will review the request and delete/remove the project promptly if needed.
 
-## 风险提示 / 免责声明
+## 中文说明
+
+Strava Auto Kudos 是一个轻量级 Chrome 扩展，适合不想每天手动给好友动态点 kudos 的跑者使用。
+
+它只会在你主动点击扩展弹窗里的 **Give kudos** 按钮后运行。扩展会在当前 Strava 页面中查找还没有点过的 kudos 按钮，滚动到对应位置，并使用随机化的等待、停顿和点击节奏来模拟更自然的人工操作。
+
+### 风险提示 / 免责声明
 
 本项目是一个开源学习脚本，仅用于学习、研究和个人技术实验。它与 Strava 官方无关，也没有得到 Strava 的认可、授权或支持。
 
@@ -22,29 +28,9 @@ If you represent Strava, a rights holder, or any party who believes this reposit
 
 如果你代表 Strava、权利方，或认为本仓库需要删除，请随时通过 GitHub Issues 或我的 GitHub 主页联系我。如有需要，我会及时审核并删除/移除该项目。
 
-## 中文说明
+### 中文安装方法
 
-Strava Auto Kudos 是一个轻量级 Chrome 扩展，适合不想每天手动给好友动态点 kudos 的跑者使用。
-
-它只会在你主动点击扩展弹窗里的 **Give kudos** 按钮后运行。扩展会在当前 Strava 页面中查找还没有点过的 kudos 按钮，滚动到对应位置，并使用随机化的等待、停顿和点击节奏来模拟更自然的人工操作。
-
-### 功能
-
-- 只匹配 Strava 页面里的 `button[data-testid="kudos_button"]`。
-- 自动跳过禁用状态的按钮。
-- 点击前会检查按钮是否已经点过，避免重复点击或撤销 kudos。
-- 不使用固定间隔，而是使用随机化时间范围：
-  - 滚动后的稳定等待
-  - 点击前停顿
-  - 按下保持时间
-  - 点击后停顿
-  - 每个目标之间的随机间隔
-  - 偶尔出现的更长停顿
-- 不收集数据，不保存账号信息，也不会把 Strava 页面内容发送到外部服务。
-
-### 安装方法
-
-推荐直接下载 Release 里的 ZIP 包：
+推荐直接下载最新 Release 里的 ZIP 包：
 
 ```text
 https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
@@ -53,15 +39,20 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 下载类似下面名字的文件：
 
 ```text
-strava-auto-kudos-v1.0.0.zip
+strava-auto-kudos-v1.0.1.zip
 ```
 
-解压后，在 Chrome 的 `chrome://extensions` 页面打开 **Developer mode**，点击 **Load unpacked**，选择解压后的 `strava-auto-kudos` 文件夹。
+解压后，请确认你选择的文件夹里面能直接看到 `manifest.json`。
 
-也可以用 Git 克隆仓库：
+正确结构应该是：
 
-```bash
-git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
+```text
+strava-auto-kudos-v1.0.1/
+  manifest.json
+  popup.html
+  popup.js
+  content.js
+  README.md
 ```
 
 然后：
@@ -74,14 +65,16 @@ git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
 
 2. 打开右上角的 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择 `strava-auto-kudos` 文件夹。
+4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.1` 文件夹。
 5. 打开或刷新 Strava：
 
    ```text
    https://www.strava.com/
    ```
 
-### 更新方法
+如果你看到“清单文件缺失或不可读取”，说明你选错了文件夹。请重新选择那个里面直接包含 `manifest.json` 的文件夹。
+
+### 中文更新方法
 
 Chrome 不会自动更新 unpacked extension。手动更新方法：
 
@@ -92,10 +85,10 @@ Chrome 不会自动更新 unpacked extension。手动更新方法：
    ```
 
 2. 解压新版本。
-3. 用新文件夹替换旧的 `strava-auto-kudos` 文件夹，或者解压到原来的固定位置。
-4. 打开 `chrome://extensions`。
-5. 找到 **Strava Auto Kudos**。
-6. 点击扩展卡片上的 reload 图标。
+3. 打开 `chrome://extensions`。
+4. 找到 **Strava Auto Kudos**。
+5. 点击扩展卡片上的 **Remove** 删除旧版本，或者点击 reload 图标重新加载同一路径下的新文件。
+6. 点击 **Load unpacked**，选择新版本中直接包含 `manifest.json` 的文件夹。
 7. 刷新已经打开的 Strava 页面。
 
 如果你是用 Git 克隆安装的，可以在项目目录运行：
@@ -106,7 +99,7 @@ git pull
 
 然后在 `chrome://extensions` 里重新加载扩展。
 
-### 使用方法
+### 中文使用方法
 
 1. 在 Chrome 中登录 Strava。
 2. 打开 Strava 动态页，例如：
@@ -120,10 +113,6 @@ git pull
 5. 保持当前 Strava 标签页打开，等待扩展处理已加载动态里的 kudos 按钮。
 
 如果你在安装或重新加载扩展之前已经打开了 Strava 页面，请先刷新 Strava 标签页，否则 Chrome 可能还没有注入 content script。
-
-### 注意事项
-
-这个项目是个人便利工具。请根据 Strava 的平台规则和账号限制合理使用，不要用于刷量、骚扰或任何违反平台规则的行为。
 
 ## What It Does
 
@@ -165,9 +154,7 @@ The manifest is intentionally narrow:
 
 The extension does not request broad browsing access. It is scoped to `https://www.strava.com/*` and only starts a kudos run after you click the popup button.
 
-## Install From Source
-
-### Option 1: Download The Release Package
+## Install From Release ZIP
 
 1. Go to the latest release:
 
@@ -178,62 +165,46 @@ The extension does not request broad browsing access. It is scoped to `https://w
 2. Download the package named like:
 
    ```text
-   strava-auto-kudos-v1.0.0.zip
+   strava-auto-kudos-v1.0.1.zip
    ```
 
 3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
 
-4. Open Chrome and go to:
+4. Confirm the folder you will load contains `manifest.json` directly:
+
+   ```text
+   strava-auto-kudos-v1.0.1/
+     manifest.json
+     popup.html
+     popup.js
+     content.js
+     README.md
+   ```
+
+5. Open Chrome and go to:
 
    ```text
    chrome://extensions
    ```
 
-5. Enable **Developer mode**.
-
-6. Click **Load unpacked**.
-
-7. Select the unzipped `strava-auto-kudos` folder.
-
-8. Open or refresh Strava:
+6. Enable **Developer mode**.
+7. Click **Load unpacked**.
+8. Select the folder that directly contains `manifest.json`.
+9. Open or refresh Strava:
 
    ```text
    https://www.strava.com/
    ```
 
-### Option 2: Clone The Repository
+If Chrome says the manifest is missing or unreadable, you selected the wrong folder. Go one folder deeper or choose the folder that directly contains `manifest.json`.
 
-1. Clone this repository.
+## Install By Cloning
 
-   ```bash
-   git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
-   ```
+```bash
+git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
+```
 
-2. Open Chrome.
-
-3. Go to:
-
-   ```text
-   chrome://extensions
-   ```
-
-4. Enable **Developer mode** in the top-right corner.
-
-5. Click **Load unpacked**.
-
-6. Select the repository folder:
-
-   ```text
-   strava-auto-kudos
-   ```
-
-7. Open or refresh Strava:
-
-   ```text
-   https://www.strava.com/
-   ```
-
-8. Click the Chrome extensions puzzle icon and pin **Strava Auto Kudos** if you want it visible in the toolbar.
+Then load the cloned repository folder from `chrome://extensions` using **Load unpacked**.
 
 ## Updating The Extension
 
@@ -246,18 +217,18 @@ Chrome does not automatically update unpacked extensions. To update manually:
    ```
 
 2. Unzip it.
-3. Replace your old `strava-auto-kudos` folder with the new unzipped folder, or unzip the new package into the same permanent location.
-4. Open:
+3. Open:
 
    ```text
    chrome://extensions
    ```
 
-5. Find **Strava Auto Kudos**.
-6. Click the reload icon on the extension card.
+4. Find **Strava Auto Kudos**.
+5. Remove the old extension or reload it if you replaced the files in the same folder.
+6. Click **Load unpacked** and select the new folder that directly contains `manifest.json`.
 7. Refresh any open Strava tabs.
 
-If you installed by cloning the repository, you can update with:
+If you installed by cloning the repository, update with:
 
 ```bash
 git pull
@@ -379,6 +350,18 @@ https://www.strava.com/*
 
 ## Troubleshooting
 
+### Chrome says the manifest is missing or unreadable
+
+You selected a folder that does not directly contain `manifest.json`.
+
+Open the folder in File Explorer. The folder you select in Chrome must show this file directly:
+
+```text
+manifest.json
+```
+
+If you see another folder first, open that inner folder and select it instead.
+
 ### The popup says to open Strava first
 
 The active tab must be on `https://www.strava.com/*`. The extension will not run on other sites.
@@ -395,14 +378,10 @@ The extension only sees DOM elements that Strava has loaded. Scroll farther down
 
 That is intentional. The content script checks multiple state signals before clicking so it does not undo or duplicate an existing kudos action.
 
-### Chrome blocks loading the extension
-
-Make sure you selected the project folder itself, not an individual file, and that the folder contains `manifest.json`.
-
 ## Privacy
 
 This extension does not collect analytics, store credentials, call external APIs, or send your Strava data anywhere. It only reads and interacts with the DOM of the active Strava page while you run it.
 
 ## Responsible Use
 
-This project is intended as a personal convenience tool. Use it thoughtfully and respect Strava's platform rules, your account limits, and your friends' feeds.
+This project is intended as a personal convenience and learning tool. Use it thoughtfully and respect Strava's platform rules, your account limits, and your friends' feeds.

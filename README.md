@@ -6,6 +6,22 @@ The extension runs only when you press its popup button on a Strava page. It sca
 
 Repository: <https://github.com/JunWeiLi233/strava-auto-kudos>
 
+## Risk Notice / Disclaimer
+
+This project is an open-source learning script shared for educational and personal research purposes. It is not affiliated with, endorsed by, or supported by Strava.
+
+Using automation on Strava may violate Strava's Terms of Service and may create account risk, including warnings, feature restrictions, temporary suspension, or permanent suspension. Use this project at your own risk. The author is not responsible for account actions, data loss, or any other consequence caused by using or modifying this code.
+
+If you represent Strava, a rights holder, or any party who believes this repository should be removed, please contact me at any time through GitHub Issues or my GitHub profile. I will review the request and delete/remove the project promptly if needed.
+
+## 风险提示 / 免责声明
+
+本项目是一个开源学习脚本，仅用于学习、研究和个人技术实验。它与 Strava 官方无关，也没有得到 Strava 的认可、授权或支持。
+
+在 Strava 上使用自动化工具可能违反 Strava 的服务条款，并可能带来账号风险，包括警告、功能限制、临时封禁或永久封禁。请自行承担使用风险。作者不对因使用或修改本代码导致的账号处理、数据损失或其他后果负责。
+
+如果你代表 Strava、权利方，或认为本仓库需要删除，请随时通过 GitHub Issues 或我的 GitHub 主页联系我。如有需要，我会及时审核并删除/移除该项目。
+
 ## 中文说明
 
 Strava Auto Kudos 是一个轻量级 Chrome 扩展，适合不想每天手动给好友动态点 kudos 的跑者使用。

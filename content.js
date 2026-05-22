@@ -9,7 +9,7 @@
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
-  const TARGET_SELECTOR = 'button[data-testid="kudos_button"]';
+  const TARGET_SELECTOR = 'button[data-testid="give_kudos_button"], button[data-testid="kudos_button"]';
   const TIMING_PROFILE = Object.freeze({
     preScrollLook: { min: 180, max: 720 },
     scrollStepPause: { min: 55, max: 210 },
@@ -142,6 +142,31 @@
     return button.disabled || button.matches(":disabled") || button.getAttribute("aria-disabled") === "true";
   }
 
+  function isButtonElement(element) {
+    return (typeof HTMLButtonElement === "function" && element instanceof HTMLButtonElement) || element.tagName === "BUTTON";
+  }
+
+  function labelText(button) {
+    return [
+      button.getAttribute("aria-label"),
+      button.getAttribute("title"),
+      button.innerText
+    ].filter(Boolean).join(" ").trim();
+  }
+
+  function isSummaryKudosButton(button) {
+    if (button.getAttribute("data-testid") !== "kudos_button") {
+      return false;
+    }
+
+    const label = labelText(button).toLowerCase();
+    if (/view all|see all|all kudos/.test(label)) {
+      return true;
+    }
+
+    return /查看所有赞|查看全部赞|查看所有讚|查看全部讚/.test(label);
+  }
+
   function parseRgb(color) {
     const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(color || "");
     if (!match) {
@@ -221,12 +246,9 @@
   }
 
   function labelIndicatesClicked(button) {
-    const label = [
-      button.getAttribute("aria-label"),
-      button.getAttribute("title")
-    ].filter(Boolean).join(" ").toLowerCase();
+    const label = labelText(button).toLowerCase();
 
-    return /remove|undo|already|kudoed|you gave/.test(label);
+    return /remove|undo|already|kudoed|you gave|取消赞|取消点赞|撤销赞|撤销点赞|已点赞|你已点赞/.test(label);
   }
 
   function graphicLooksFilled(button) {
@@ -448,7 +470,7 @@
 
   function getCandidateButtons() {
     return Array.from(document.querySelectorAll(TARGET_SELECTOR)).filter((button) => {
-      return button instanceof HTMLButtonElement && !isDisabled(button);
+      return isButtonElement(button) && !isDisabled(button) && !isSummaryKudosButton(button);
     });
   }
 

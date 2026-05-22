@@ -39,7 +39,7 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 下载类似下面名字的文件：
 
    ```text
-   strava-auto-kudos-v1.0.4.zip
+   strava-auto-kudos-v1.0.5.zip
    ```
 
 解压后，请确认你选择的文件夹里面能直接看到 `manifest.json`。
@@ -47,7 +47,7 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 正确结构应该是：
 
 ```text
-strava-auto-kudos-v1.0.4/
+strava-auto-kudos-v1.0.5/
   manifest.json
   popup.html
   popup.js
@@ -65,7 +65,7 @@ strava-auto-kudos-v1.0.4/
 
 2. 打开右上角的 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.4` 文件夹。
+4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.5` 文件夹。
 5. 打开或刷新 Strava：
 
    ```text
@@ -120,7 +120,8 @@ git pull
 
 ## What It Does
 
-- Finds Strava kudos buttons with `button[data-testid="kudos_button"]`.
+- Finds Strava kudos action buttons with `button[data-testid="give_kudos_button"]`, with legacy support for `button[data-testid="kudos_button"]`.
+- Ignores Strava's non-action "view all kudos" summary buttons.
 - Opens `https://www.strava.com/dashboard` automatically when the active tab is not on Strava.
 - Checks for an apparent logged-out Strava page before running and warns the user to log in first.
 - Recovers from the Chrome message error `Could not establish connection. Receiving end does not exist.` by injecting the content script when needed.
@@ -178,7 +179,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 2. Download the package named like:
 
    ```text
-strava-auto-kudos-v1.0.4.zip
+strava-auto-kudos-v1.0.5.zip
    ```
 
 3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
@@ -186,7 +187,7 @@ strava-auto-kudos-v1.0.4.zip
 4. Confirm the folder you will load contains `manifest.json` directly:
 
    ```text
-strava-auto-kudos-v1.0.4/
+strava-auto-kudos-v1.0.5/
      manifest.json
      popup.html
      popup.js
@@ -282,8 +283,8 @@ The popup sends a message to the content script running on the active Strava tab
 
 The content script then:
 
-1. Selects candidate buttons with `button[data-testid="kudos_button"]`.
-2. Filters out disabled buttons.
+1. Selects candidate buttons with `button[data-testid="give_kudos_button"]` and legacy `button[data-testid="kudos_button"]`.
+2. Filters out disabled buttons and non-action "view all kudos" summary buttons.
 3. Checks each button for already-clicked signals:
    - `aria-pressed`
    - `aria-selected`
@@ -391,7 +392,7 @@ The active tab must be on `https://www.strava.com/*`. The extension will not run
 
 ### Nothing happens after clicking the popup button
 
-Use the newest release package. Version `v1.0.4` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
+Use the newest release package. Version `v1.0.5` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
 
 If you are on an older version, refresh the Strava tab after installing or reloading the extension. Chrome only injects content scripts into matching pages after the extension is loaded.
 
@@ -401,7 +402,7 @@ Open the Strava tab, log in normally, then run the extension again.
 
 ### It clicks fewer buttons than expected
 
-Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons.
+Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons. Version `v1.0.5` also follows Strava's current `give_kudos_button` selector and skips non-action "view all kudos" buttons.
 
 ### Already-clicked kudos are skipped
 

@@ -20,7 +20,7 @@
       }
 
       body {
-        width: 292px;
+        width: 316px;
         margin: 0;
         background: var(--surface);
         color: var(--ink);
@@ -134,6 +134,12 @@
         gap: 8px;
       }
 
+      .date-row {
+        display: grid;
+        grid-template-columns: 1.2fr 0.85fr 1fr;
+        gap: 8px;
+      }
+
       label {
         display: grid;
         gap: 4px;
@@ -141,17 +147,20 @@
         font-size: 12px;
       }
 
-      input {
+      input,
+      select {
         width: 100%;
         min-height: 34px;
         border: 1px solid var(--line);
         border-radius: 6px;
         padding: 6px 8px;
+        background: #ffffff;
         color: var(--ink);
         font: inherit;
       }
 
-      input:focus-visible {
+      input:focus-visible,
+      select:focus-visible {
         outline: 2px solid #111827;
         outline-offset: 2px;
       }
@@ -186,6 +195,30 @@
           <label for="maxDelayInput">
             Max sec
             <input id="maxDelayInput" type="number" min="0.8" max="120" step="0.1" value="4.6" inputmode="decimal">
+          </label>
+        </div>
+      </fieldset>
+      <fieldset class="settings">
+        <legend>Activity date</legend>
+        <div class="date-row">
+          <label for="dateRangeMode">
+            Filter
+            <select id="dateRangeMode">
+              <option value="any">Any time</option>
+              <option value="last">Last</option>
+            </select>
+          </label>
+          <label for="dateRangeValue">
+            Range
+            <input id="dateRangeValue" type="number" min="1" max="3650" step="1" value="7" inputmode="numeric">
+          </label>
+          <label for="dateRangeUnit">
+            Unit
+            <select id="dateRangeUnit">
+              <option value="days">days</option>
+              <option value="months">months</option>
+              <option value="years">years</option>
+            </select>
           </label>
         </div>
       </fieldset>

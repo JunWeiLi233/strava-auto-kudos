@@ -12,15 +12,29 @@
     min: 1.7,
     max: 4.6
   });
+  const DEFAULT_DATE_RANGE = Object.freeze({
+    mode: "any",
+    value: 7,
+    unit: "days"
+  });
   const DELAY_LIMIT_SECONDS = Object.freeze({
     min: 0.8,
     max: 120
+  });
+  const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
+  const DATE_RANGE_LIMITS = Object.freeze({
+    days: 3650,
+    months: 120,
+    years: 10
   });
 
   const runButton = document.getElementById("runButton");
   const stopButton = document.getElementById("stopButton");
   const minDelayInput = document.getElementById("minDelayInput");
   const maxDelayInput = document.getElementById("maxDelayInput");
+  const dateRangeMode = document.getElementById("dateRangeMode");
+  const dateRangeValue = document.getElementById("dateRangeValue");
+  const dateRangeUnit = document.getElementById("dateRangeUnit");
   const statusText = document.getElementById("status");
   const statusDot = document.getElementById("statusDot");
 
@@ -48,14 +62,40 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  function loadDelaySettings() {
+  function parsePositiveInteger(value) {
+    const text = String(value || "").trim();
+    if (!/^\d+$/.test(text)) {
+      return null;
+    }
+
+    const parsed = Number.parseInt(text, 10);
+    return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : null;
+  }
+
+  function loadStoredSettings() {
     try {
       const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (!raw) {
-        return { ...DEFAULT_DELAY_RANGE_SECONDS };
+        return {};
       }
 
       const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function saveStoredSettings(settings) {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+      ...loadStoredSettings(),
+      ...settings
+    }));
+  }
+
+  function loadDelaySettings() {
+    try {
+      const parsed = loadStoredSettings();
       const min = parseSeconds(parsed.minDelaySeconds);
       const max = parseSeconds(parsed.maxDelaySeconds);
       if (min === null || max === null) {
@@ -69,16 +109,51 @@
   }
 
   function saveDelaySettings(range) {
-    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+    saveStoredSettings({
       minDelaySeconds: range.min,
       maxDelaySeconds: range.max
-    }));
+    });
   }
 
   function applyDelaySettingsToInputs() {
     const range = loadDelaySettings();
     minDelayInput.value = String(range.min);
     maxDelayInput.value = String(range.max);
+  }
+
+  function loadDateRangeSettings() {
+    const stored = loadStoredSettings();
+    const mode = stored.dateRangeMode === "last" ? "last" : DEFAULT_DATE_RANGE.mode;
+    const unit = DATE_RANGE_UNITS.includes(stored.dateRangeUnit) ? stored.dateRangeUnit : DEFAULT_DATE_RANGE.unit;
+    const value = parsePositiveInteger(stored.dateRangeValue) || DEFAULT_DATE_RANGE.value;
+
+    return {
+      mode,
+      value: Math.min(value, DATE_RANGE_LIMITS[unit]),
+      unit
+    };
+  }
+
+  function saveDateRangeSettings(range) {
+    saveStoredSettings({
+      dateRangeMode: range.mode,
+      dateRangeValue: range.value,
+      dateRangeUnit: range.unit
+    });
+  }
+
+  function setDateRangeControlsEnabled() {
+    const isActive = dateRangeMode.value === "last";
+    dateRangeValue.disabled = !isActive;
+    dateRangeUnit.disabled = !isActive;
+  }
+
+  function applyDateRangeSettingsToInputs() {
+    const range = loadDateRangeSettings();
+    dateRangeMode.value = range.mode;
+    dateRangeValue.value = String(range.value);
+    dateRangeUnit.value = range.unit;
+    setDateRangeControlsEnabled();
   }
 
   function readDelaySettings() {
@@ -109,13 +184,47 @@
     return normalized;
   }
 
+  function readDateRangeSettings() {
+    const mode = dateRangeMode.value === "last" ? "last" : "any";
+    const unit = DATE_RANGE_UNITS.includes(dateRangeUnit.value) ? dateRangeUnit.value : null;
+    const fallbackValue = parsePositiveInteger(dateRangeValue.value) || DEFAULT_DATE_RANGE.value;
+
+    if (!unit) {
+      throw new Error("Choose days, months, or years for the date filter.");
+    }
+
+    if (mode === "any") {
+      const saved = {
+        mode,
+        value: Math.min(fallbackValue, DATE_RANGE_LIMITS[unit]),
+        unit
+      };
+      saveDateRangeSettings(saved);
+      return { mode };
+    }
+
+    const value = parsePositiveInteger(dateRangeValue.value);
+    if (value === null) {
+      throw new Error("Enter a whole number for the date range.");
+    }
+
+    if (value > DATE_RANGE_LIMITS[unit]) {
+      throw new Error(`Date range must be ${DATE_RANGE_LIMITS[unit]} ${unit} or less.`);
+    }
+
+    const normalized = { mode, value, unit };
+    saveDateRangeSettings(normalized);
+    return normalized;
+  }
+
   function buildRunSettings() {
     const range = readDelaySettings();
     return {
       betweenTargets: {
         min: Math.round(range.min * 1000),
         max: Math.round(range.max * 1000)
-      }
+      },
+      dateRange: readDateRangeSettings()
     };
   }
 
@@ -265,7 +374,11 @@
     const metrics = response.metrics || {};
     const clicked = Number(metrics.clicked || 0);
     const scanned = Number(metrics.scanned || 0);
-    const skipped = Number(metrics.skippedAlreadyClicked || 0) + Number(metrics.skippedDisabled || 0) + Number(metrics.skippedMissing || 0);
+    const skipped = Number(metrics.skippedAlreadyClicked || 0) +
+      Number(metrics.skippedDisabled || 0) +
+      Number(metrics.skippedMissing || 0) +
+      Number(metrics.skippedOutOfDate || 0) +
+      Number(metrics.skippedUnknownDate || 0);
 
     if (metrics.stopped) {
       return `Stopped after ${clicked} click${clicked === 1 ? "" : "s"}; scanned ${scanned}, skipped ${skipped}.`;
@@ -368,6 +481,32 @@
       setStatus(error.message || "Invalid delay range.", "error");
     }
   });
+  dateRangeMode.addEventListener("change", () => {
+    try {
+      setDateRangeControlsEnabled();
+      readDateRangeSettings();
+      setStatus("Date filter saved.", "ready");
+    } catch (error) {
+      setStatus(error.message || "Invalid date filter.", "error");
+    }
+  });
+  dateRangeValue.addEventListener("change", () => {
+    try {
+      readDateRangeSettings();
+      setStatus("Date filter saved.", "ready");
+    } catch (error) {
+      setStatus(error.message || "Invalid date filter.", "error");
+    }
+  });
+  dateRangeUnit.addEventListener("change", () => {
+    try {
+      readDateRangeSettings();
+      setStatus("Date filter saved.", "ready");
+    } catch (error) {
+      setStatus(error.message || "Invalid date filter.", "error");
+    }
+  });
   applyDelaySettingsToInputs();
+  applyDateRangeSettingsToInputs();
   refreshStatus();
 })();

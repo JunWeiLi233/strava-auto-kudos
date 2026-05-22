@@ -27,6 +27,16 @@
     min: 800,
     max: 120000
   });
+  const DEFAULT_DATE_RANGE = Object.freeze({
+    value: 7,
+    unit: "days"
+  });
+  const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
+  const DATE_RANGE_LIMITS = Object.freeze({
+    days: 3650,
+    months: 120,
+    years: 10
+  });
   const DISCOVERY_PROFILE = Object.freeze({
     maxIdleScrollAttempts: 4,
     maxProcessedButtons: 250
@@ -119,6 +129,38 @@
     return {
       min: Math.min(normalizedMin, normalizedMax),
       max: Math.max(normalizedMin, normalizedMax)
+    };
+  }
+
+  function cutoffForDateRange(now, value, unit) {
+    const cutoff = new Date(now.getTime());
+    if (unit === "years") {
+      cutoff.setFullYear(cutoff.getFullYear() - value);
+    } else if (unit === "months") {
+      cutoff.setMonth(cutoff.getMonth() - value);
+    } else {
+      cutoff.setDate(cutoff.getDate() - value);
+    }
+
+    return cutoff;
+  }
+
+  function normalizeDateRange(settings) {
+    const range = settings && settings.dateRange ? settings.dateRange : null;
+    if (!range || range.mode !== "last") {
+      return { mode: "any" };
+    }
+
+    const unit = DATE_RANGE_UNITS.includes(range.unit) ? range.unit : DEFAULT_DATE_RANGE.unit;
+    const rawValue = Number(range.value);
+    const roundedValue = Number.isFinite(rawValue) ? Math.round(rawValue) : DEFAULT_DATE_RANGE.value;
+    const value = Math.max(1, Math.min(DATE_RANGE_LIMITS[unit], roundedValue));
+
+    return {
+      mode: "last",
+      value,
+      unit,
+      cutoffTimestamp: cutoffForDateRange(new Date(), value, unit).getTime()
     };
   }
 
@@ -281,6 +323,201 @@
 
   function isAlreadyClicked(button) {
     return hasPressedState(button) || labelIndicatesClicked(button) || hasFilledClassSignal(button) || graphicLooksFilled(button);
+  }
+
+  function normalizeDateText(text) {
+    return String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function applyTimeFromText(date, text) {
+    const normalized = normalizeDateText(text);
+    const amPmMatch = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?/i.exec(normalized);
+    if (amPmMatch) {
+      let hour = Number(amPmMatch[1]);
+      const minute = Number(amPmMatch[2] || 0);
+      const marker = amPmMatch[3].toLowerCase();
+
+      if (marker === "p" && hour < 12) {
+        hour += 12;
+      }
+      if (marker === "a" && hour === 12) {
+        hour = 0;
+      }
+      if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+        date.setHours(hour, minute, 0, 0);
+      }
+      return date;
+    }
+
+    const timeMatch = /(?:\bat\b|\u4e8e|\s|^)\s*(\d{1,2}):(\d{2})/.exec(normalized);
+    if (timeMatch) {
+      const hour = Number(timeMatch[1]);
+      const minute = Number(timeMatch[2]);
+      if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+        date.setHours(hour, minute, 0, 0);
+      }
+    }
+
+    return date;
+  }
+
+  function localDateForDayOffset(now, dayOffset, text) {
+    const date = new Date(now.getTime());
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - dayOffset);
+    return applyTimeFromText(date, text);
+  }
+
+  function adjustFutureYear(date, now, hasExplicitYear) {
+    if (!hasExplicitYear && date.getTime() - now.getTime() > 24 * 60 * 60 * 1000) {
+      date.setFullYear(date.getFullYear() - 1);
+    }
+
+    return date;
+  }
+
+  function parseChineseAbsoluteActivityDate(text, now) {
+    const match = /(?:(\d{4})\s*\u5e74)?\s*(\d{1,2})\s*\u6708\s*(\d{1,2})\s*\u65e5/.exec(text);
+    if (!match) {
+      return null;
+    }
+
+    const hasExplicitYear = Boolean(match[1]);
+    const year = hasExplicitYear ? Number(match[1]) : now.getFullYear();
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+      return null;
+    }
+
+    date.setHours(0, 0, 0, 0);
+    return adjustFutureYear(applyTimeFromText(date, text), now, hasExplicitYear);
+  }
+
+  function parseEnglishRelativeActivityDate(text, now) {
+    const match = /(\d+)\s*(minute|minutes|min|mins|hour|hours|hr|hrs|day|days|week|weeks|month|months|year|years)\s*ago/i.exec(text);
+    if (!match) {
+      return null;
+    }
+
+    const amount = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    if (!Number.isFinite(amount)) {
+      return null;
+    }
+
+    let multiplier = 60 * 1000;
+    if (unit.startsWith("hour") || unit.startsWith("hr")) {
+      multiplier = 60 * 60 * 1000;
+    } else if (unit.startsWith("day")) {
+      multiplier = 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("week")) {
+      multiplier = 7 * 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("month")) {
+      multiplier = 30 * 24 * 60 * 60 * 1000;
+    } else if (unit.startsWith("year")) {
+      multiplier = 365 * 24 * 60 * 60 * 1000;
+    }
+
+    return new Date(now.getTime() - amount * multiplier);
+  }
+
+  function parseChineseRelativeActivityDate(text, now) {
+    const match = /(\d+)\s*(\u5206\u949f|\u5206\u9418|\u5206|\u5c0f\u65f6|\u5c0f\u6642|\u65f6|\u6642|\u5929|\u65e5|\u5468|\u9031|\u661f\u671f|\u4e2a\u6708|\u500b\u6708|\u6708|\u5e74)\s*\u524d/.exec(text);
+    if (!match) {
+      return null;
+    }
+
+    const amount = Number(match[1]);
+    const unit = match[2];
+    if (!Number.isFinite(amount)) {
+      return null;
+    }
+
+    let multiplier = 60 * 1000;
+    if (/^\u5c0f\u65f6$|^\u5c0f\u6642$|^\u65f6$|^\u6642$/.test(unit)) {
+      multiplier = 60 * 60 * 1000;
+    } else if (/^\u5929$|^\u65e5$/.test(unit)) {
+      multiplier = 24 * 60 * 60 * 1000;
+    } else if (/^\u5468$|^\u9031$|^\u661f\u671f$/.test(unit)) {
+      multiplier = 7 * 24 * 60 * 60 * 1000;
+    } else if (/^\u4e2a\u6708$|^\u500b\u6708$|^\u6708$/.test(unit)) {
+      multiplier = 30 * 24 * 60 * 60 * 1000;
+    } else if (/^\u5e74$/.test(unit)) {
+      multiplier = 365 * 24 * 60 * 60 * 1000;
+    }
+
+    return new Date(now.getTime() - amount * multiplier);
+  }
+
+  function parseEnglishDateFallback(text, now) {
+    const cleaned = normalizeDateText(text)
+      .replace(/\s*[·•].*$/, "")
+      .replace(/\bat\b/ig, " ");
+    const candidates = [text, cleaned];
+
+    for (const candidate of candidates) {
+      const normalized = normalizeDateText(candidate);
+      if (!normalized) {
+        continue;
+      }
+
+      const timestamp = Date.parse(normalized);
+      if (!Number.isFinite(timestamp)) {
+        continue;
+      }
+
+      const hasExplicitYear = /\b\d{4}\b/.test(normalized);
+      return adjustFutureYear(new Date(timestamp), now, hasExplicitYear);
+    }
+
+    return null;
+  }
+
+  function parseActivityDate(rawText, now) {
+    const text = normalizeDateText(rawText);
+    const referenceTime = now || new Date();
+    if (!text) {
+      return null;
+    }
+
+    if (/\u4eca\u5929/i.test(text) || /\btoday\b/i.test(text)) {
+      return localDateForDayOffset(referenceTime, 0, text);
+    }
+
+    if (/\u6628\u5929/i.test(text) || /\byesterday\b/i.test(text)) {
+      return localDateForDayOffset(referenceTime, 1, text);
+    }
+
+    return parseChineseAbsoluteActivityDate(text, referenceTime) ||
+      parseEnglishRelativeActivityDate(text, referenceTime) ||
+      parseChineseRelativeActivityDate(text, referenceTime) ||
+      parseEnglishDateFallback(text, referenceTime);
+  }
+
+  function activityDateTextFor(button) {
+    const entry = button.closest('[data-testid="web-feed-entry"]');
+    const dateNode = entry ? entry.querySelector('time[data-testid="date_at_time"], time') : null;
+    if (!dateNode) {
+      return "";
+    }
+
+    return normalizeDateText(dateNode.getAttribute("datetime") || dateNode.textContent);
+  }
+
+  function dateFilterStatusForButton(button, dateRange) {
+    if (!dateRange || dateRange.mode !== "last") {
+      return "include";
+    }
+
+    const activityDate = parseActivityDate(activityDateTextFor(button));
+    if (!activityDate) {
+      return "unknown";
+    }
+
+    return activityDate.getTime() >= dateRange.cutoffTimestamp ? "include" : "out-of-date";
   }
 
   function pageScrollY() {
@@ -498,13 +735,15 @@
     };
   }
 
-  function createMetrics(scanned, betweenTargets) {
+  function createMetrics(scanned, betweenTargets, dateRange) {
     return {
       scanned,
       clicked: 0,
       skippedAlreadyClicked: 0,
       skippedDisabled: 0,
       skippedMissing: 0,
+      skippedOutOfDate: 0,
+      skippedUnknownDate: 0,
       errors: 0,
       stopped: false,
       stopRequestedAt: null,
@@ -512,13 +751,14 @@
       idleDiscoveryAttempts: 0,
       cappedBySafetyLimit: false,
       delayRangeMs: betweenTargets,
+      dateRange,
       startedAt: Date.now(),
       finishedAt: null,
       durationMs: null
     };
   }
 
-  async function processButton(button, metrics) {
+  async function processButton(button, metrics, dateRange) {
     if (runState.cancelRequested) {
       return false;
     }
@@ -538,6 +778,16 @@
       return true;
     }
 
+    const dateFilterStatus = dateFilterStatusForButton(button, dateRange);
+    if (dateFilterStatus === "out-of-date") {
+      metrics.skippedOutOfDate += 1;
+      return true;
+    }
+    if (dateFilterStatus === "unknown") {
+      metrics.skippedUnknownDate += 1;
+      return true;
+    }
+
     if (!(await humanScrollToElement(button))) {
       return false;
     }
@@ -554,6 +804,16 @@
 
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
+      return true;
+    }
+
+    const settledDateFilterStatus = dateFilterStatusForButton(button, dateRange);
+    if (settledDateFilterStatus === "out-of-date") {
+      metrics.skippedOutOfDate += 1;
+      return true;
+    }
+    if (settledDateFilterStatus === "unknown") {
+      metrics.skippedUnknownDate += 1;
       return true;
     }
 
@@ -622,7 +882,8 @@
     }
 
     const betweenTargets = normalizeBetweenTargetsRange(settings);
-    const metrics = createMetrics(0, betweenTargets);
+    const dateRange = normalizeDateRange(settings);
+    const metrics = createMetrics(0, betweenTargets, dateRange);
     const paceState = createPaceState();
     const processedButtons = new WeakSet();
     let idleScrollAttempts = 0;
@@ -664,7 +925,7 @@
         }
 
         try {
-          await processButton(button, metrics);
+          await processButton(button, metrics, dateRange);
         } catch (_error) {
           metrics.errors += 1;
         }

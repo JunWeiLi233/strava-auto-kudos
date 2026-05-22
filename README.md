@@ -39,7 +39,7 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 下载类似下面名字的文件：
 
    ```text
-   strava-auto-kudos-v1.0.7.zip
+   strava-auto-kudos-v1.0.8.zip
    ```
 
 解压后，请确认你选择的文件夹里面能直接看到 `manifest.json`。
@@ -47,7 +47,7 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 正确结构应该是：
 
 ```text
-strava-auto-kudos-v1.0.7/
+strava-auto-kudos-v1.0.8/
   manifest.json
   background.js
   popup.html
@@ -66,7 +66,7 @@ strava-auto-kudos-v1.0.7/
 
 2. 打开右上角的 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.7` 文件夹。
+4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.8` 文件夹。
 5. 打开或刷新 Strava：
 
    ```text
@@ -110,16 +110,17 @@ git pull
    ```
 
 3. 点击浏览器工具栏里的 **Strava Auto Kudos** 扩展图标。
-4. 点击 **Give kudos**。
-5. 如果当前页面不是 Strava，扩展会自动打开 Strava dashboard。
-6. 如果 Strava 未登录，扩展会提示你先登录再使用。
-7. 可在弹窗里的 **Kudos delay** 中设置每次 kudos 之间的最小和最大等待秒数。
-8. 可在 **Activity date** 中选择日期范围：
+4. 如果需要，点击右上角的 **中文 / EN** 按钮切换弹窗语言。
+5. 点击 **Give kudos**。
+6. 如果当前页面不是 Strava，扩展会自动打开 Strava dashboard。
+7. 如果 Strava 未登录，扩展会提示你先登录再使用。
+8. 可在弹窗里的 **Kudos delay** 中设置每次 kudos 之间的最小和最大等待秒数。
+9. 可在 **Activity date** 中选择日期范围：
    - **Any time**：不按日期过滤，处理页面上可见和后续加载的动态。
    - **Last N days/months/years**：只处理最近 N 天、N 个月或 N 年内的动态。
-9. 如果启用了日期过滤，扩展会读取每条 Strava 动态里的时间文本。无法识别日期的动态会被跳过，避免误点超出你设置范围的 kudos。
-10. 保持 Strava 标签页打开即可。运行开始后可以关闭扩展弹窗，也可以切换到其他 Chrome 窗口继续做别的事；kudos 流程会继续在 Strava 标签页中运行。
-11. 如果想中途停止，重新打开扩展弹窗并点击 **Stop**。
+10. 如果启用了日期过滤，扩展会读取每条 Strava 动态里的时间文本。无法识别日期的动态会被跳过，避免误点超出你设置范围的 kudos。
+11. 保持 Strava 标签页打开并可见。运行开始后可以关闭扩展弹窗，也可以切换到其他窗口继续做别的事；如果 Chrome 把 Strava 标签页标记为隐藏，扩展会暂停滚动并在标签页可见后继续。
+12. 如果想中途停止，重新打开扩展弹窗并点击 **Stop**。
 
 如果你在安装或重新加载扩展之前已经打开了 Strava 页面，请先刷新 Strava 标签页，否则 Chrome 可能还没有注入 content script。
 
@@ -135,6 +136,8 @@ git pull
 - Keeps rescanning after it reaches the end of the current loaded batch and scrolls down to discover newly loaded feed items.
 - Starts the kudos run through a Manifest V3 background service worker so the popup does not need to stay open.
 - Lets the user switch to another Chrome tab or window while the Strava tab continues processing.
+- Pauses instead of ending when Chrome marks the Strava tab as hidden, then resumes when the tab becomes visible again.
+- Adds an English/Chinese popup language toggle.
 - Lets the user set the minimum and maximum delay between kudos actions from the popup.
 - Lets the user limit automation to activities from **Any time** or **Last N days/months/years**.
 - Skips out-of-range activities when a date filter is active.
@@ -190,7 +193,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 2. Download the package named like:
 
    ```text
-strava-auto-kudos-v1.0.7.zip
+strava-auto-kudos-v1.0.8.zip
    ```
 
 3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
@@ -198,7 +201,7 @@ strava-auto-kudos-v1.0.7.zip
 4. Confirm the folder you will load contains `manifest.json` directly:
 
    ```text
-strava-auto-kudos-v1.0.7/
+strava-auto-kudos-v1.0.8/
      manifest.json
      background.js
      popup.html
@@ -272,16 +275,17 @@ Then reload the extension from `chrome://extensions`.
    ```
 
 3. Click the **Strava Auto Kudos** extension icon.
-4. Set the **Kudos delay** minimum and maximum seconds if you want a custom delay range between kudos actions.
-5. Set **Activity date** if you want a date filter:
+4. Use the **中文 / EN** button in the popup header to switch the popup language.
+5. Set the **Kudos delay** minimum and maximum seconds if you want a custom delay range between kudos actions.
+6. Set **Activity date** if you want a date filter:
    - **Any time** keeps the current behavior and does not filter by activity date.
    - **Last N days/months/years** only gives kudos to activities inside that date range.
-6. Press **Give kudos**.
-7. If the active tab is not on Strava, the extension opens the Strava dashboard first.
-8. If Strava appears logged out, the extension warns you to log in before running.
-9. Leave the Strava tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
-10. After the popup says the run started, you can close the popup and use another Chrome tab or window. The Strava tab continues running in the background as long as Chrome keeps the page alive.
-11. To interrupt an active run, open the popup again and press **Stop**.
+7. Press **Give kudos**.
+8. If the active tab is not on Strava, the extension opens the Strava dashboard first.
+9. If Strava appears logged out, the extension warns you to log in before running.
+10. Leave the Strava tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
+11. After the popup says the run started, you can close the popup and use another Chrome tab or window. If Chrome marks the Strava tab as hidden, the extension pauses scrolling instead of ending, then resumes when the tab becomes visible again.
+12. To interrupt an active run, open the popup again and press **Stop**.
 
 If Strava was already open before you installed or reloaded the extension, refresh the Strava tab once so Chrome injects the content script.
 
@@ -327,7 +331,8 @@ The content script returns a start confirmation immediately, then continues the 
 8. Re-checks that the button is still connected, enabled, unclicked, and still inside the selected date range.
 9. Dispatches pointer and mouse events around the native click.
 10. Waits a randomized delay before moving to the next target.
-11. When no unprocessed kudos buttons remain in the current DOM, scrolls down and rescans for newly loaded feed items before deciding the run is complete.
+11. If Chrome reports the Strava page is hidden, waits without consuming idle discovery attempts.
+12. When no unprocessed kudos buttons remain in the current DOM, scrolls down and rescans for newly loaded feed items before deciding the run is complete.
 
 ## Timing Profile
 
@@ -424,7 +429,7 @@ If the active tab is not on `https://www.strava.com/*`, the background service w
 
 ### Nothing happens after clicking the popup button
 
-Use the newest release package. Version `v1.0.7` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
+Use the newest release package. Version `v1.0.8` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
 
 If you are on an older version, refresh the Strava tab after installing or reloading the extension. Chrome only injects content scripts into matching pages after the extension is loaded.
 
@@ -432,9 +437,13 @@ If you are on an older version, refresh the Strava tab after installing or reloa
 
 Open the Strava tab, log in normally, then run the extension again.
 
+### The popup says Strava is hidden
+
+Chrome and Strava can throttle scrolling and infinite-feed loading when a tab is hidden. Version `v1.0.8` pauses instead of ending in that state. Keep the Strava tab selected in its own Chrome window, or bring the Strava tab back into view, and the run will continue.
+
 ### It clicks fewer buttons than expected
 
-Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons. Version `v1.0.5` also follows Strava's current `give_kudos_button` selector and skips non-action "view all kudos" buttons. Version `v1.0.6` adds the activity date filter, so out-of-range activities and unreadable dates are skipped when the filter is enabled. Version `v1.0.7` starts runs through a background service worker, so the popup does not need to remain open.
+Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons. Version `v1.0.5` also follows Strava's current `give_kudos_button` selector and skips non-action "view all kudos" buttons. Version `v1.0.6` adds the activity date filter, so out-of-range activities and unreadable dates are skipped when the filter is enabled. Version `v1.0.7` starts runs through a background service worker, so the popup does not need to remain open. Version `v1.0.8` adds the language switch and pauses hidden-tab discovery instead of treating hidden-tab scroll failures as completion.
 
 ### Already-clicked kudos are skipped
 

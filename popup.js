@@ -5,6 +5,9 @@
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
   const SETTINGS_STORAGE_KEY = "stravaAutoKudosSettings";
+  const LANGUAGE_STORAGE_KEY = "stravaAutoKudosLanguage";
+  const DEFAULT_LANGUAGE = "en";
+  const SUPPORTED_LANGUAGES = Object.freeze(["en", "zh"]);
   const DEFAULT_DELAY_RANGE_SECONDS = Object.freeze({
     min: 1.7,
     max: 4.6
@@ -24,9 +27,116 @@
     months: 120,
     years: 10
   });
+  const TRANSLATIONS = Object.freeze({
+    en: {
+      title: "Strava Kudos",
+      languageButtonLabel: "Switch language to Chinese",
+      runButton: "Give kudos",
+      stopButton: "Stop",
+      delayLegend: "Kudos delay",
+      minDelayLabel: "Min sec",
+      maxDelayLabel: "Max sec",
+      dateLegend: "Activity date",
+      dateFilterLabel: "Filter",
+      dateAnyOption: "Any time",
+      dateLastOption: "Last",
+      dateRangeLabel: "Range",
+      dateUnitLabel: "Unit",
+      daysOption: "days",
+      monthsOption: "months",
+      yearsOption: "years",
+      daysUnit: "days",
+      monthsUnit: "months",
+      yearsUnit: "years",
+      readyStatus: "Ready on Strava.",
+      validDelayError: "Enter a valid kudos delay range.",
+      minDelayError: "Delay must be at least {min} seconds.",
+      maxDelayError: "Delay must be {max} seconds or less.",
+      minDelayOrderError: "Min delay must be less than or equal to max delay.",
+      chooseDateUnitError: "Choose days, months, or years for the date filter.",
+      wholeDateRangeError: "Enter a whole number for the date range.",
+      dateRangeLimitError: "Date range must be {limit} {unit} or less.",
+      noConfirmationStatus: "No kudos run confirmation received.",
+      startedStatus: "Kudos started. You can use other windows while the Strava tab stays open.",
+      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}.",
+      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}.",
+      clickSingular: "click",
+      clickPlural: "clicks",
+      buttonSingular: "button",
+      buttonPlural: "buttons",
+      stoppingStatus: "Stopping after the current movement...",
+      hiddenPauseStatus: "Paused while the Strava tab is hidden. Keep the Strava tab visible to continue scrolling.",
+      runningStatus: "Kudos sequence is running in the Strava tab.",
+      startStatus: "Starting Strava kudos...",
+      loginRequired: "Please log in to Strava, then run this extension again.",
+      unableStart: "Unable to start kudos sequence.",
+      stopRequestStatus: "Sending stop request...",
+      unableStop: "Unable to stop kudos sequence.",
+      delaySaved: "Delay range saved.",
+      invalidDelay: "Invalid delay range.",
+      dateSaved: "Date filter saved.",
+      invalidDate: "Invalid date filter.",
+      noRunningStatus: "No kudos sequence is running.",
+      openStravaStatus: "Open Strava to run kudos.",
+      alreadyRunningStatus: "Kudos sequence is already running."
+    },
+    zh: {
+      title: "Strava Kudos",
+      languageButtonLabel: "切换到英文",
+      runButton: "给 kudos",
+      stopButton: "停止",
+      delayLegend: "Kudos 间隔",
+      minDelayLabel: "最短秒数",
+      maxDelayLabel: "最长秒数",
+      dateLegend: "动态日期",
+      dateFilterLabel: "过滤",
+      dateAnyOption: "不限时间",
+      dateLastOption: "最近",
+      dateRangeLabel: "范围",
+      dateUnitLabel: "单位",
+      daysOption: "天",
+      monthsOption: "个月",
+      yearsOption: "年",
+      daysUnit: "天",
+      monthsUnit: "个月",
+      yearsUnit: "年",
+      readyStatus: "Strava 已就绪。",
+      validDelayError: "请输入有效的 kudos 间隔范围。",
+      minDelayError: "间隔至少需要 {min} 秒。",
+      maxDelayError: "间隔不能超过 {max} 秒。",
+      minDelayOrderError: "最短间隔必须小于或等于最长间隔。",
+      chooseDateUnitError: "请选择天、月或年作为日期过滤单位。",
+      wholeDateRangeError: "请输入整数日期范围。",
+      dateRangeLimitError: "日期范围不能超过 {limit} {unit}。",
+      noConfirmationStatus: "没有收到 kudos 运行确认。",
+      startedStatus: "Kudos 已开始。保持 Strava 标签页打开后，你可以使用其他窗口。",
+      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个。",
+      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个。",
+      clickSingular: "click",
+      clickPlural: "clicks",
+      buttonSingular: "按钮",
+      buttonPlural: "按钮",
+      stoppingStatus: "正在完成当前动作后停止...",
+      hiddenPauseStatus: "Strava 标签页隐藏时已暂停。请保持 Strava 标签页可见以继续滚动。",
+      runningStatus: "Kudos 流程正在 Strava 标签页中运行。",
+      startStatus: "正在启动 Strava kudos...",
+      loginRequired: "请先登录 Strava，然后再使用扩展。",
+      unableStart: "无法启动 kudos 流程。",
+      stopRequestStatus: "正在发送停止请求...",
+      unableStop: "无法停止 kudos 流程。",
+      delaySaved: "间隔范围已保存。",
+      invalidDelay: "间隔范围无效。",
+      dateSaved: "日期过滤已保存。",
+      invalidDate: "日期过滤无效。",
+      noRunningStatus: "当前没有正在运行的 kudos 流程。",
+      openStravaStatus: "请打开 Strava 后再运行 kudos。",
+      alreadyRunningStatus: "Kudos 流程已经在运行。"
+    }
+  });
 
   const runButton = document.getElementById("runButton");
   const stopButton = document.getElementById("stopButton");
+  const languageButton = document.getElementById("languageButton");
   const minDelayInput = document.getElementById("minDelayInput");
   const maxDelayInput = document.getElementById("maxDelayInput");
   const dateRangeMode = document.getElementById("dateRangeMode");
@@ -34,10 +144,78 @@
   const dateRangeUnit = document.getElementById("dateRangeUnit");
   const statusText = document.getElementById("status");
   const statusDot = document.getElementById("statusDot");
+  let currentLanguage = loadLanguage();
+  let lastStatus = { key: "readyStatus", params: {}, state: "ready" };
 
-  function setStatus(message, state) {
-    statusText.textContent = message;
+  function loadLanguage() {
+    try {
+      const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      return SUPPORTED_LANGUAGES.includes(stored) ? stored : DEFAULT_LANGUAGE;
+    } catch (_error) {
+      return DEFAULT_LANGUAGE;
+    }
+  }
+
+  function saveLanguage(language) {
+    try {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    } catch (_error) {
+      // Language persistence is optional; the popup can still switch for this session.
+    }
+  }
+
+  function t(key, params) {
+    const dictionary = TRANSLATIONS[currentLanguage] || TRANSLATIONS.en;
+    const template = dictionary[key] || TRANSLATIONS.en[key] || key;
+    return Object.entries(params || {}).reduce((text, entry) => {
+      return text.replaceAll(`{${entry[0]}}`, String(entry[1]));
+    }, template);
+  }
+
+  function languageCodeForHtml() {
+    return currentLanguage === "zh" ? "zh-CN" : "en";
+  }
+
+  function renderStatusDescriptor(descriptor) {
+    if (descriptor && descriptor.key) {
+      return t(descriptor.key, descriptor.params);
+    }
+
+    return descriptor && descriptor.text ? descriptor.text : "";
+  }
+
+  function setStatusDescriptor(descriptor, state) {
+    lastStatus = {
+      ...descriptor,
+      state
+    };
+    statusText.textContent = renderStatusDescriptor(lastStatus);
     statusDot.dataset.state = state;
+  }
+
+  function setStatusKey(key, state, params) {
+    setStatusDescriptor({ key, params: params || {} }, state);
+  }
+
+  function setStatusText(message, state) {
+    setStatusDescriptor({ text: message }, state);
+  }
+
+  function applyLanguage() {
+    document.documentElement.lang = languageCodeForHtml();
+    document.querySelectorAll("[data-i18n]").forEach((element) => {
+      element.textContent = t(element.dataset.i18n);
+    });
+
+    languageButton.textContent = currentLanguage === "en" ? "中文" : "EN";
+    languageButton.setAttribute("aria-label", t("languageButtonLabel"));
+    statusText.textContent = renderStatusDescriptor(lastStatus);
+  }
+
+  function toggleLanguage() {
+    currentLanguage = currentLanguage === "en" ? "zh" : "en";
+    saveLanguage(currentLanguage);
+    applyLanguage();
   }
 
   function setRunningControls(isRunning, stopPending) {
@@ -140,24 +318,35 @@
     setDateRangeControlsEnabled();
   }
 
+  function unitLabel(unit) {
+    if (unit === "months") {
+      return t("monthsUnit");
+    }
+    if (unit === "years") {
+      return t("yearsUnit");
+    }
+
+    return t("daysUnit");
+  }
+
   function readDelaySettings() {
     const min = parseSeconds(minDelayInput.value);
     const max = parseSeconds(maxDelayInput.value);
 
     if (min === null || max === null) {
-      throw new Error("Enter a valid kudos delay range.");
+      throw new Error(t("validDelayError"));
     }
 
     if (min < DELAY_LIMIT_SECONDS.min || max < DELAY_LIMIT_SECONDS.min) {
-      throw new Error(`Delay must be at least ${DELAY_LIMIT_SECONDS.min} seconds.`);
+      throw new Error(t("minDelayError", { min: DELAY_LIMIT_SECONDS.min }));
     }
 
     if (min > DELAY_LIMIT_SECONDS.max || max > DELAY_LIMIT_SECONDS.max) {
-      throw new Error(`Delay must be ${DELAY_LIMIT_SECONDS.max} seconds or less.`);
+      throw new Error(t("maxDelayError", { max: DELAY_LIMIT_SECONDS.max }));
     }
 
     if (min > max) {
-      throw new Error("Min delay must be less than or equal to max delay.");
+      throw new Error(t("minDelayOrderError"));
     }
 
     const normalized = {
@@ -174,7 +363,7 @@
     const fallbackValue = parsePositiveInteger(dateRangeValue.value) || DEFAULT_DATE_RANGE.value;
 
     if (!unit) {
-      throw new Error("Choose days, months, or years for the date filter.");
+      throw new Error(t("chooseDateUnitError"));
     }
 
     if (mode === "any") {
@@ -189,11 +378,14 @@
 
     const value = parsePositiveInteger(dateRangeValue.value);
     if (value === null) {
-      throw new Error("Enter a whole number for the date range.");
+      throw new Error(t("wholeDateRangeError"));
     }
 
     if (value > DATE_RANGE_LIMITS[unit]) {
-      throw new Error(`Date range must be ${DATE_RANGE_LIMITS[unit]} ${unit} or less.`);
+      throw new Error(t("dateRangeLimitError", {
+        limit: DATE_RANGE_LIMITS[unit],
+        unit: unitLabel(unit)
+      }));
     }
 
     const normalized = { mode, value, unit };
@@ -246,13 +438,32 @@
       Number(metrics.skippedUnknownDate || 0);
   }
 
-  function formatResult(response) {
+  function knownMessageKey(message) {
+    const text = String(message || "").toLowerCase();
+    if (/no .*kudos sequence is running/.test(text)) {
+      return "noRunningStatus";
+    }
+    if (/open strava/.test(text)) {
+      return "openStravaStatus";
+    }
+    if (/already running/.test(text)) {
+      return "alreadyRunningStatus";
+    }
+    if (/please log in/.test(text)) {
+      return "loginRequired";
+    }
+
+    return null;
+  }
+
+  function resultStatusDescriptor(response) {
     if (!response || !response.ok) {
-      return response && response.message ? response.message : "No kudos run confirmation received.";
+      const key = knownMessageKey(response && response.message);
+      return key ? { key } : { key: "noConfirmationStatus" };
     }
 
     if (response.started) {
-      return "Kudos started. You can use other windows while the Strava tab stays open.";
+      return { key: "startedStatus" };
     }
 
     const metrics = response.metrics || (response.state && response.state.metrics) || {};
@@ -261,14 +472,35 @@
     const skipped = skippedCount(metrics);
 
     if (metrics.stopped) {
-      return `Stopped after ${clicked} click${clicked === 1 ? "" : "s"}; scanned ${scanned}, skipped ${skipped}.`;
+      return {
+        key: "stoppedSummary",
+        params: {
+          clicked,
+          clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"),
+          scanned,
+          skipped
+        }
+      };
     }
 
-    if (response.message) {
-      return response.message;
+    const knownKey = knownMessageKey(response.message);
+    if (knownKey) {
+      return { key: knownKey };
     }
 
-    return `Clicked ${clicked} of ${scanned} button${scanned === 1 ? "" : "s"}; skipped ${skipped}.`;
+    if (response.message && !scanned && !clicked && !skipped) {
+      return { text: response.message };
+    }
+
+    return {
+      key: "clickedSummary",
+      params: {
+        clicked,
+        scanned,
+        buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"),
+        skipped
+      }
+    };
   }
 
   function applyStatusResponse(response, quiet) {
@@ -278,17 +510,22 @@
     setRunningControls(isRunning, stopPending);
 
     if (isRunning && stopPending) {
-      setStatus("Stopping after the current movement...", "busy");
+      setStatusKey("stoppingStatus", "busy");
+      return;
+    }
+
+    if (isRunning && state.pageHidden) {
+      setStatusKey("hiddenPauseStatus", "busy");
       return;
     }
 
     if (isRunning) {
-      setStatus("Kudos sequence is running in the Strava tab.", "busy");
+      setStatusKey("runningStatus", "busy");
       return;
     }
 
     if (!quiet) {
-      setStatus(formatResult(response), response && response.ok ? "ready" : "error");
+      setStatusDescriptor(resultStatusDescriptor(response), response && response.ok ? "ready" : "error");
     }
   }
 
@@ -303,40 +540,40 @@
 
   async function run() {
     setRunningControls(true, false);
-    setStatus("Starting Strava kudos...", "busy");
+    setStatusKey("startStatus", "busy");
 
     try {
       const runSettings = buildRunSettings();
       const response = await sendRuntimeAction(ACTION_RUN_KUDOS, runSettings);
       if (isLoggedOutResponse(response)) {
         setRunningControls(false, false);
-        setStatus("Please log in to Strava, then run this extension again.", "error");
+        setStatusKey("loginRequired", "error");
         return;
       }
 
       applyStatusResponse(response, true);
       const state = response && response.state ? response.state : {};
-      setStatus(formatResult(response), response && (response.ok || state.running) ? "busy" : "error");
+      setStatusDescriptor(resultStatusDescriptor(response), response && (response.ok || state.running) ? "busy" : "error");
     } catch (error) {
       setRunningControls(false, false);
-      setStatus(error.message || "Unable to start kudos sequence.", "error");
+      setStatusText(error.message || t("unableStart"), "error");
     }
   }
 
   async function stop() {
     setRunningControls(true, true);
-    setStatus("Sending stop request...", "busy");
+    setStatusKey("stopRequestStatus", "busy");
 
     try {
       const response = await sendRuntimeAction(ACTION_STOP_KUDOS);
       if (response && response.ok) {
         applyStatusResponse(response, false);
       } else {
-        setStatus(formatResult(response), "ready");
+        setStatusDescriptor(resultStatusDescriptor(response), "ready");
         setRunningControls(false, false);
       }
     } catch (error) {
-      setStatus(error.message || "Unable to stop kudos sequence.", "error");
+      setStatusText(error.message || t("unableStop"), "error");
       setRunningControls(false, false);
     }
   }
@@ -344,9 +581,9 @@
   function saveDelayFromInputs() {
     try {
       readDelaySettings();
-      setStatus("Delay range saved.", "ready");
+      setStatusKey("delaySaved", "ready");
     } catch (error) {
-      setStatus(error.message || "Invalid delay range.", "error");
+      setStatusText(error.message || t("invalidDelay"), "error");
     }
   }
 
@@ -354,19 +591,21 @@
     try {
       setDateRangeControlsEnabled();
       readDateRangeSettings();
-      setStatus("Date filter saved.", "ready");
+      setStatusKey("dateSaved", "ready");
     } catch (error) {
-      setStatus(error.message || "Invalid date filter.", "error");
+      setStatusText(error.message || t("invalidDate"), "error");
     }
   }
 
   runButton.addEventListener("click", run);
   stopButton.addEventListener("click", stop);
+  languageButton.addEventListener("click", toggleLanguage);
   minDelayInput.addEventListener("change", saveDelayFromInputs);
   maxDelayInput.addEventListener("change", saveDelayFromInputs);
   dateRangeMode.addEventListener("change", saveDateRangeFromInputs);
   dateRangeValue.addEventListener("change", saveDateRangeFromInputs);
   dateRangeUnit.addEventListener("change", saveDateRangeFromInputs);
+  applyLanguage();
   applyDelaySettingsToInputs();
   applyDateRangeSettingsToInputs();
   refreshStatus();

@@ -47,6 +47,13 @@
         letter-spacing: 0;
       }
 
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 0 0 auto;
+      }
+
       .status-dot {
         width: 9px;
         height: 9px;
@@ -111,6 +118,22 @@
       button:disabled {
         cursor: wait;
         opacity: 0.68;
+      }
+
+      .language-toggle {
+        width: auto;
+        min-width: 44px;
+        min-height: 28px;
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: var(--ink);
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .language-toggle:hover {
+        background: #f6f8fa;
       }
 
       .settings {
@@ -178,51 +201,54 @@
   <body>
     <main>
       <header>
-        <h1>Strava Kudos</h1>
-        <span id="statusDot" class="status-dot" data-state="ready" aria-hidden="true"></span>
+        <h1 data-i18n="title">Strava Kudos</h1>
+        <div class="header-actions">
+          <button id="languageButton" class="language-toggle" type="button" aria-label="Switch language">中文</button>
+          <span id="statusDot" class="status-dot" data-state="ready" aria-hidden="true"></span>
+        </div>
       </header>
       <div class="controls">
-        <button id="runButton" type="button">Give kudos</button>
-        <button id="stopButton" class="secondary" type="button" disabled>Stop</button>
+        <button id="runButton" type="button" data-i18n="runButton">Give kudos</button>
+        <button id="stopButton" class="secondary" type="button" disabled data-i18n="stopButton">Stop</button>
       </div>
       <fieldset class="settings">
-        <legend>Kudos delay</legend>
+        <legend data-i18n="delayLegend">Kudos delay</legend>
         <div class="range-row">
           <label for="minDelayInput">
-            Min sec
+            <span data-i18n="minDelayLabel">Min sec</span>
             <input id="minDelayInput" type="number" min="0.8" max="120" step="0.1" value="1.7" inputmode="decimal">
           </label>
           <label for="maxDelayInput">
-            Max sec
+            <span data-i18n="maxDelayLabel">Max sec</span>
             <input id="maxDelayInput" type="number" min="0.8" max="120" step="0.1" value="4.6" inputmode="decimal">
           </label>
         </div>
       </fieldset>
       <fieldset class="settings">
-        <legend>Activity date</legend>
+        <legend data-i18n="dateLegend">Activity date</legend>
         <div class="date-row">
           <label for="dateRangeMode">
-            Filter
+            <span data-i18n="dateFilterLabel">Filter</span>
             <select id="dateRangeMode">
-              <option value="any">Any time</option>
-              <option value="last">Last</option>
+              <option value="any" data-i18n="dateAnyOption">Any time</option>
+              <option value="last" data-i18n="dateLastOption">Last</option>
             </select>
           </label>
           <label for="dateRangeValue">
-            Range
+            <span data-i18n="dateRangeLabel">Range</span>
             <input id="dateRangeValue" type="number" min="1" max="3650" step="1" value="7" inputmode="numeric">
           </label>
           <label for="dateRangeUnit">
-            Unit
+            <span data-i18n="dateUnitLabel">Unit</span>
             <select id="dateRangeUnit">
-              <option value="days">days</option>
-              <option value="months">months</option>
-              <option value="years">years</option>
+              <option value="days" data-i18n="daysOption">days</option>
+              <option value="months" data-i18n="monthsOption">months</option>
+              <option value="years" data-i18n="yearsOption">years</option>
             </select>
           </label>
         </div>
       </fieldset>
-      <p id="status" role="status" aria-live="polite">Ready on Strava.</p>
+      <p id="status" role="status" aria-live="polite" data-i18n="readyStatus">Ready on Strava.</p>
     </main>
     <script src="popup.js"></script>
   </body>

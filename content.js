@@ -41,6 +41,10 @@
     maxIdleScrollAttempts: 4,
     maxProcessedButtons: 250
   });
+  const VISIBILITY_PROFILE = Object.freeze({
+    hiddenPoll: { min: 900, max: 1800 },
+    resumeSettle: { min: 700, max: 1400 }
+  });
 
   const runState = {
     running: false,
@@ -323,6 +327,29 @@
 
   function isAlreadyClicked(button) {
     return hasPressedState(button) || labelIndicatesClicked(button) || hasFilledClassSignal(button) || graphicLooksFilled(button);
+  }
+
+  function isPageHidden() {
+    return document.hidden || document.visibilityState === "hidden";
+  }
+
+  async function waitForVisiblePage(metrics) {
+    if (!isPageHidden()) {
+      return true;
+    }
+
+    metrics.hiddenWaits += 1;
+    metrics.hiddenSince = metrics.hiddenSince || Date.now();
+
+    while (isPageHidden()) {
+      if (!(await cancellableDelay(VISIBILITY_PROFILE.hiddenPoll))) {
+        return false;
+      }
+    }
+
+    metrics.hiddenResumeCount += 1;
+    metrics.hiddenSince = null;
+    return cancellableDelay(VISIBILITY_PROFILE.resumeSettle);
   }
 
   function normalizeDateText(text) {
@@ -750,6 +777,9 @@
       discoveryScrolls: 0,
       idleDiscoveryAttempts: 0,
       cappedBySafetyLimit: false,
+      hiddenWaits: 0,
+      hiddenResumeCount: 0,
+      hiddenSince: null,
       delayRangeMs: betweenTargets,
       dateRange,
       startedAt: Date.now(),
@@ -776,6 +806,10 @@
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
       return true;
+    }
+
+    if (!(await waitForVisiblePage(metrics))) {
+      return false;
     }
 
     const dateFilterStatus = dateFilterStatusForButton(button, dateRange);
@@ -807,6 +841,10 @@
       return true;
     }
 
+    if (!(await waitForVisiblePage(metrics))) {
+      return false;
+    }
+
     const settledDateFilterStatus = dateFilterStatusForButton(button, dateRange);
     if (settledDateFilterStatus === "out-of-date") {
       metrics.skippedOutOfDate += 1;
@@ -831,6 +869,7 @@
       state: {
         running: runState.running,
         cancelRequested: runState.cancelRequested,
+        pageHidden: isPageHidden(),
         login: detectLoginState(),
         metrics: runState.activeMetrics || runState.lastMetrics
       }
@@ -873,6 +912,10 @@
 
     try {
       while (!runState.cancelRequested) {
+        if (!(await waitForVisiblePage(metrics))) {
+          break;
+        }
+
         if (metrics.scanned >= DISCOVERY_PROFILE.maxProcessedButtons) {
           metrics.cappedBySafetyLimit = true;
           break;

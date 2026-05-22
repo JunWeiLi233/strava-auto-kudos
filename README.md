@@ -38,16 +38,16 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 
 下载类似下面名字的文件：
 
-```text
-strava-auto-kudos-v1.0.3.zip
-```
+   ```text
+   strava-auto-kudos-v1.0.4.zip
+   ```
 
 解压后，请确认你选择的文件夹里面能直接看到 `manifest.json`。
 
 正确结构应该是：
 
 ```text
-strava-auto-kudos-v1.0.3/
+strava-auto-kudos-v1.0.4/
   manifest.json
   popup.html
   popup.js
@@ -65,7 +65,7 @@ strava-auto-kudos-v1.0.3/
 
 2. 打开右上角的 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.3` 文件夹。
+4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.4` 文件夹。
 5. 打开或刷新 Strava：
 
    ```text
@@ -112,8 +112,9 @@ git pull
 4. 点击 **Give kudos**。
 5. 如果当前页面不是 Strava，扩展会自动打开 Strava dashboard。
 6. 如果 Strava 未登录，扩展会提示你先登录再使用。
-7. 保持当前 Strava 标签页打开，等待扩展处理已加载动态里的 kudos 按钮。
-8. 如果想中途停止，重新打开扩展弹窗并点击 **Stop**。
+7. 可在弹窗里的 **Kudos delay** 中设置每次 kudos 之间的最小和最大等待秒数。
+8. 保持当前 Strava 标签页打开，等待扩展处理动态里的 kudos 按钮。扩展会在当前批次处理完后继续向下滚动，尝试发现新加载的动态。
+9. 如果想中途停止，重新打开扩展弹窗并点击 **Stop**。
 
 如果你在安装或重新加载扩展之前已经打开了 Strava 页面，请先刷新 Strava 标签页，否则 Chrome 可能还没有注入 content script。
 
@@ -125,6 +126,8 @@ git pull
 - Recovers from the Chrome message error `Could not establish connection. Receiving end does not exist.` by injecting the content script when needed.
 - Skips disabled buttons.
 - Checks button state before clicking so already-given kudos are not clicked again.
+- Keeps rescanning after it reaches the end of the current loaded batch and scrolls down to discover newly loaded feed items.
+- Lets the user set the minimum and maximum delay between kudos actions from the popup.
 - Uses randomized timing instead of static pauses:
   - pre-scroll looking delay
   - uneven wheel-like scroll steps
@@ -175,7 +178,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 2. Download the package named like:
 
    ```text
-   strava-auto-kudos-v1.0.3.zip
+strava-auto-kudos-v1.0.4.zip
    ```
 
 3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
@@ -183,7 +186,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 4. Confirm the folder you will load contains `manifest.json` directly:
 
    ```text
-   strava-auto-kudos-v1.0.3/
+strava-auto-kudos-v1.0.4/
      manifest.json
      popup.html
      popup.js
@@ -256,11 +259,12 @@ Then reload the extension from `chrome://extensions`.
    ```
 
 3. Click the **Strava Auto Kudos** extension icon.
-4. Press **Give kudos**.
-5. If the active tab is not on Strava, the extension opens the Strava dashboard first.
-6. If Strava appears logged out, the extension warns you to log in before running.
-7. Leave the tab open while the extension scrolls through visible feed items and processes available kudos buttons.
-8. To interrupt an active run, open the popup again and press **Stop**.
+4. Set the **Kudos delay** minimum and maximum seconds if you want a custom delay range between kudos actions.
+5. Press **Give kudos**.
+6. If the active tab is not on Strava, the extension opens the Strava dashboard first.
+7. If Strava appears logged out, the extension warns you to log in before running.
+8. Leave the tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
+9. To interrupt an active run, open the popup again and press **Stop**.
 
 If Strava was already open before you installed or reloaded the extension, refresh the Strava tab once so Chrome injects the content script.
 
@@ -292,6 +296,7 @@ The content script then:
 6. Re-checks that the button is still connected, enabled, and unclicked.
 7. Dispatches pointer and mouse events around the native click.
 8. Waits a randomized delay before moving to the next target.
+9. When no unprocessed kudos buttons remain in the current DOM, scrolls down and rescans for newly loaded feed items before deciding the run is complete.
 
 ## Timing Profile
 
@@ -308,11 +313,12 @@ const TIMING_PROFILE = Object.freeze({
   postClickDwell: { min: 320, max: 1050 },
   betweenTargets: { min: 1700, max: 4600 },
   longPause: { min: 4200, max: 7800 },
-  longPauseEvery: { min: 4, max: 7 }
+  longPauseEvery: { min: 4, max: 7 },
+  feedLoadSettle: { min: 900, max: 1800 }
 });
 ```
 
-There are no fixed transaction sleeps in the content script. Each step uses a bounded random range to avoid a repetitive mechanical rhythm.
+There are no fixed transaction sleeps in the content script. Each step uses a bounded random range to avoid a repetitive mechanical rhythm. The popup can override `betweenTargets` with a user-selected delay range from `0.8` to `120` seconds.
 
 ## Development
 
@@ -385,7 +391,7 @@ The active tab must be on `https://www.strava.com/*`. The extension will not run
 
 ### Nothing happens after clicking the popup button
 
-Use the newest release package. Version `v1.0.3` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
+Use the newest release package. Version `v1.0.4` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
 
 If you are on an older version, refresh the Strava tab after installing or reloading the extension. Chrome only injects content scripts into matching pages after the extension is loaded.
 
@@ -395,7 +401,7 @@ Open the Strava tab, log in normally, then run the extension again.
 
 ### It clicks fewer buttons than expected
 
-The extension only sees DOM elements that Strava has loaded. Scroll farther down the feed to load more activities, then run it again.
+Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons.
 
 ### Already-clicked kudos are skipped
 

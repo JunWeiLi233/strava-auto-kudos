@@ -20,7 +20,16 @@
     postClickDwell: { min: 320, max: 1050 },
     betweenTargets: { min: 1700, max: 4600 },
     longPause: { min: 4200, max: 7800 },
-    longPauseEvery: { min: 4, max: 7 }
+    longPauseEvery: { min: 4, max: 7 },
+    feedLoadSettle: { min: 900, max: 1800 }
+  });
+  const USER_DELAY_LIMIT_MS = Object.freeze({
+    min: 800,
+    max: 120000
+  });
+  const DISCOVERY_PROFILE = Object.freeze({
+    maxIdleScrollAttempts: 4,
+    maxProcessedButtons: 250
   });
 
   const runState = {
@@ -70,12 +79,13 @@
 
   function createPaceState() {
     return {
+      betweenTargets: { ...TIMING_PROFILE.betweenTargets },
       interactionsUntilLongPause: randomInteger(TIMING_PROFILE.longPauseEvery.min, TIMING_PROFILE.longPauseEvery.max)
     };
   }
 
   async function pauseBetweenTargets(paceState) {
-    if (!(await cancellableDelay(TIMING_PROFILE.betweenTargets))) {
+    if (!(await cancellableDelay(paceState.betweenTargets))) {
       return false;
     }
 
@@ -86,6 +96,30 @@
 
     paceState.interactionsUntilLongPause = randomInteger(TIMING_PROFILE.longPauseEvery.min, TIMING_PROFILE.longPauseEvery.max);
     return cancellableDelay(TIMING_PROFILE.longPause);
+  }
+
+  function clampDelayMs(value) {
+    return Math.max(USER_DELAY_LIMIT_MS.min, Math.min(USER_DELAY_LIMIT_MS.max, value));
+  }
+
+  function normalizeBetweenTargetsRange(settings) {
+    const range = settings && settings.betweenTargets ? settings.betweenTargets : null;
+    if (!range) {
+      return { ...TIMING_PROFILE.betweenTargets };
+    }
+
+    const min = Number(range.min);
+    const max = Number(range.max);
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return { ...TIMING_PROFILE.betweenTargets };
+    }
+
+    const normalizedMin = clampDelayMs(Math.round(min));
+    const normalizedMax = clampDelayMs(Math.round(max));
+    return {
+      min: Math.min(normalizedMin, normalizedMax),
+      max: Math.max(normalizedMin, normalizedMax)
+    };
   }
 
   function classTextFor(element) {
@@ -272,6 +306,28 @@
     return Math.abs(pageScrollY() - beforeY) < 1 && Math.abs(distance) < 140;
   }
 
+  async function scrollForMoreFeedItems() {
+    const beforeY = pageScrollY();
+    const beforeHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
+    const scrollDistance = randomInteger(Math.floor(viewportHeight * 0.75), Math.floor(viewportHeight * 1.35));
+
+    dispatchWheelGesture(scrollDistance);
+    window.scrollBy({
+      top: scrollDistance,
+      left: 0,
+      behavior: "auto"
+    });
+
+    if (!(await cancellableDelay(TIMING_PROFILE.feedLoadSettle))) {
+      return false;
+    }
+
+    const afterY = pageScrollY();
+    const afterHeight = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
+    return Math.abs(afterY - beforeY) > 4 || afterHeight > beforeHeight;
+  }
+
   function interactionPointFor(element) {
     const rect = element.getBoundingClientRect();
     const horizontalInset = Math.min(rect.width * 0.22, 10);
@@ -396,6 +452,10 @@
     });
   }
 
+  function getUnprocessedCandidateButtons(processedButtons) {
+    return getCandidateButtons().filter((button) => !processedButtons.has(button));
+  }
+
   function isLoginPage() {
     const path = window.location.pathname.toLowerCase();
     if (path === "/login" || path.startsWith("/login/") || path === "/register" || path.startsWith("/register/")) {
@@ -416,7 +476,7 @@
     };
   }
 
-  function createMetrics(scanned) {
+  function createMetrics(scanned, betweenTargets) {
     return {
       scanned,
       clicked: 0,
@@ -426,6 +486,10 @@
       errors: 0,
       stopped: false,
       stopRequestedAt: null,
+      discoveryScrolls: 0,
+      idleDiscoveryAttempts: 0,
+      cappedBySafetyLimit: false,
+      delayRangeMs: betweenTargets,
       startedAt: Date.now(),
       finishedAt: null,
       durationMs: null
@@ -512,7 +576,7 @@
     };
   }
 
-  async function runKudosSequence() {
+  async function runKudosSequence(settings) {
     if (runState.running) {
       return {
         ok: false,
@@ -535,13 +599,44 @@
       };
     }
 
-    const buttons = getCandidateButtons();
-    const metrics = createMetrics(buttons.length);
+    const betweenTargets = normalizeBetweenTargetsRange(settings);
+    const metrics = createMetrics(0, betweenTargets);
     const paceState = createPaceState();
+    const processedButtons = new WeakSet();
+    let idleScrollAttempts = 0;
+    paceState.betweenTargets = betweenTargets;
     runState.activeMetrics = metrics;
 
     try {
-      for (const button of buttons) {
+      while (!runState.cancelRequested) {
+        if (metrics.scanned >= DISCOVERY_PROFILE.maxProcessedButtons) {
+          metrics.cappedBySafetyLimit = true;
+          break;
+        }
+
+        const buttons = getUnprocessedCandidateButtons(processedButtons);
+        if (buttons.length === 0) {
+          if (idleScrollAttempts >= DISCOVERY_PROFILE.maxIdleScrollAttempts) {
+            break;
+          }
+
+          metrics.discoveryScrolls += 1;
+          await scrollForMoreFeedItems();
+          if (runState.cancelRequested) {
+            break;
+          }
+          idleScrollAttempts += 1;
+          metrics.idleDiscoveryAttempts = idleScrollAttempts;
+          continue;
+        }
+
+        idleScrollAttempts = 0;
+        metrics.idleDiscoveryAttempts = 0;
+
+        const button = buttons[0];
+        processedButtons.add(button);
+        metrics.scanned += 1;
+
         if (runState.cancelRequested) {
           break;
         }
@@ -597,7 +692,7 @@
       return false;
     }
 
-    runKudosSequence()
+    runKudosSequence(message.settings)
       .then((result) => {
         sendResponse(result);
       })

@@ -20,7 +20,7 @@
       }
 
       body {
-        width: 264px;
+        width: 292px;
         margin: 0;
         background: var(--surface);
         color: var(--ink);
@@ -113,6 +113,49 @@
         opacity: 0.68;
       }
 
+      .settings {
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+
+      .settings legend {
+        padding: 0 4px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .range-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      input {
+        width: 100%;
+        min-height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 6px 8px;
+        color: var(--ink);
+        font: inherit;
+      }
+
+      input:focus-visible {
+        outline: 2px solid #111827;
+        outline-offset: 2px;
+      }
+
       #status {
         min-height: 34px;
         margin: 0;
@@ -133,6 +176,19 @@
         <button id="runButton" type="button">Give kudos</button>
         <button id="stopButton" class="secondary" type="button" disabled>Stop</button>
       </div>
+      <fieldset class="settings">
+        <legend>Kudos delay</legend>
+        <div class="range-row">
+          <label for="minDelayInput">
+            Min sec
+            <input id="minDelayInput" type="number" min="0.8" max="120" step="0.1" value="1.7" inputmode="decimal">
+          </label>
+          <label for="maxDelayInput">
+            Max sec
+            <input id="maxDelayInput" type="number" min="0.8" max="120" step="0.1" value="4.6" inputmode="decimal">
+          </label>
+        </div>
+      </fieldset>
       <p id="status" role="status" aria-live="polite">Ready on Strava.</p>
     </main>
     <script src="popup.js"></script>

@@ -1,6 +1,11 @@
 (() => {
   "use strict";
 
+  if (window.__stravaAutoKudosContentLoaded) {
+    return;
+  }
+  window.__stravaAutoKudosContentLoaded = true;
+
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
@@ -391,6 +396,26 @@
     });
   }
 
+  function isLoginPage() {
+    const path = window.location.pathname.toLowerCase();
+    if (path === "/login" || path.startsWith("/login/") || path === "/register" || path.startsWith("/register/")) {
+      return true;
+    }
+
+    const loginForm = document.querySelector('form[action*="/login"], input[type="password"], input[name="email"]');
+    const pageText = document.body ? document.body.innerText.toLowerCase() : "";
+    return Boolean(loginForm && /log in|login|sign in|password/.test(pageText));
+  }
+
+  function detectLoginState() {
+    const loggedOut = isLoginPage();
+    return {
+      loggedIn: !loggedOut,
+      loggedOut,
+      url: window.location.href
+    };
+  }
+
   function createMetrics(scanned) {
     return {
       scanned,
@@ -460,6 +485,7 @@
       state: {
         running: runState.running,
         cancelRequested: runState.cancelRequested,
+        login: detectLoginState(),
         metrics: runState.activeMetrics || runState.lastMetrics
       }
     };
@@ -497,6 +523,17 @@
 
     runState.running = true;
     runState.cancelRequested = false;
+
+    const login = detectLoginState();
+    if (!login.loggedIn) {
+      runState.running = false;
+      return {
+        ok: false,
+        message: "Please log in to Strava before using this extension.",
+        login,
+        metrics: null
+      };
+    }
 
     const buttons = getCandidateButtons();
     const metrics = createMetrics(buttons.length);

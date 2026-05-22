@@ -5,6 +5,8 @@
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
   const STRAVA_HOST = "www.strava.com";
+  const STRAVA_DASHBOARD_URL = "https://www.strava.com/dashboard";
+  const MISSING_RECEIVER_PATTERN = /Could not establish connection|Receiving end does not exist/i;
 
   const runButton = document.getElementById("runButton");
   const stopButton = document.getElementById("stopButton");
@@ -44,6 +46,72 @@
     });
   }
 
+  function createTab(url) {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.create({ active: true, url }, (tab) => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+
+        resolve(tab);
+      });
+    });
+  }
+
+  function updateTab(tabId, url) {
+    return new Promise((resolve, reject) => {
+      chrome.tabs.update(tabId, { active: true, url }, (tab) => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+
+        resolve(tab);
+      });
+    });
+  }
+
+  function waitForTabComplete(tabId) {
+    return new Promise((resolve) => {
+      const timeoutId = window.setTimeout(() => {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }, 12000);
+
+      function listener(updatedTabId, changeInfo) {
+        if (updatedTabId !== tabId || changeInfo.status !== "complete") {
+          return;
+        }
+
+        window.clearTimeout(timeoutId);
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve();
+      }
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  }
+
+  function executeContentScript(tabId) {
+    return new Promise((resolve, reject) => {
+      chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"]
+      }, () => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          reject(new Error(error.message));
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
+
   function sendActionMessage(tabId, action) {
     const payload = {
       action,
@@ -64,17 +132,41 @@
     });
   }
 
-  async function getActiveStravaTab() {
+  async function ensureStravaTab() {
     const tab = await queryActiveTab();
     if (!tab || typeof tab.id !== "number") {
-      throw new Error("No active tab found.");
+      setStatus("Opening Strava...", "busy");
+      const createdTab = await createTab(STRAVA_DASHBOARD_URL);
+      await waitForTabComplete(createdTab.id);
+      return createdTab;
     }
 
     if (!isSupportedStravaUrl(tab.url)) {
-      throw new Error("Open https://www.strava.com/ first.");
+      setStatus("Opening Strava...", "busy");
+      const updatedTab = await updateTab(tab.id, STRAVA_DASHBOARD_URL);
+      await waitForTabComplete(tab.id);
+      return updatedTab || { id: tab.id, url: STRAVA_DASHBOARD_URL };
     }
 
     return tab;
+  }
+
+  async function sendActionWithInjectedContent(tabId, action) {
+    try {
+      return await sendActionMessage(tabId, action);
+    } catch (error) {
+      if (!MISSING_RECEIVER_PATTERN.test(error.message || "")) {
+        throw error;
+      }
+
+      await executeContentScript(tabId);
+      return sendActionMessage(tabId, action);
+    }
+  }
+
+  function isLoggedOutResponse(response) {
+    const login = response && (response.login || (response.state && response.state.login));
+    return login && login.loggedIn === false;
   }
 
   function formatResult(response) {
@@ -110,8 +202,13 @@
 
   async function refreshStatus() {
     try {
-      const tab = await getActiveStravaTab();
-      const response = await sendActionMessage(tab.id, ACTION_STATUS_KUDOS);
+      const tab = await queryActiveTab();
+      if (!tab || typeof tab.id !== "number" || !isSupportedStravaUrl(tab.url)) {
+        setRunningControls(false, false);
+        return;
+      }
+
+      const response = await sendActionWithInjectedContent(tab.id, ACTION_STATUS_KUDOS);
       applyStatusResponse(response);
     } catch (_error) {
       setRunningControls(false, false);
@@ -123,9 +220,20 @@
     setStatus("Checking active tab...", "busy");
 
     try {
-      const tab = await getActiveStravaTab();
+      const tab = await ensureStravaTab();
+      setStatus("Checking Strava login...", "busy");
+      const statusResponse = await sendActionWithInjectedContent(tab.id, ACTION_STATUS_KUDOS);
+      if (isLoggedOutResponse(statusResponse)) {
+        setStatus("Please log in to Strava, then run this extension again.", "error");
+        return;
+      }
+
       setStatus("Running kudos sequence...", "busy");
-      const response = await sendActionMessage(tab.id, ACTION_RUN_KUDOS);
+      const response = await sendActionWithInjectedContent(tab.id, ACTION_RUN_KUDOS);
+      if (isLoggedOutResponse(response)) {
+        setStatus("Please log in to Strava, then run this extension again.", "error");
+        return;
+      }
       setStatus(formatResult(response), response && response.ok ? "ready" : "error");
     } catch (error) {
       setStatus(error.message || "Unable to run kudos sequence.", "error");
@@ -139,8 +247,8 @@
     setStatus("Sending stop request...", "busy");
 
     try {
-      const tab = await getActiveStravaTab();
-      const response = await sendActionMessage(tab.id, ACTION_STOP_KUDOS);
+      const tab = await ensureStravaTab();
+      const response = await sendActionWithInjectedContent(tab.id, ACTION_STOP_KUDOS);
       if (response && response.ok) {
         setStatus(response.message || "Stop requested.", "busy");
       } else {

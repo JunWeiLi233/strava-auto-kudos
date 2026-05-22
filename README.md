@@ -6,6 +6,68 @@ The extension runs only when you press its popup button on a Strava page. It sca
 
 Repository: <https://github.com/JunWeiLi233/strava-auto-kudos>
 
+## 中文说明
+
+Strava Auto Kudos 是一个轻量级 Chrome 扩展，适合不想每天手动给好友动态点 kudos 的跑者使用。
+
+它只会在你主动点击扩展弹窗里的 **Give kudos** 按钮后运行。扩展会在当前 Strava 页面中查找还没有点过的 kudos 按钮，滚动到对应位置，并使用随机化的等待、停顿和点击节奏来模拟更自然的人工操作。
+
+### 功能
+
+- 只匹配 Strava 页面里的 `button[data-testid="kudos_button"]`。
+- 自动跳过禁用状态的按钮。
+- 点击前会检查按钮是否已经点过，避免重复点击或撤销 kudos。
+- 不使用固定间隔，而是使用随机化时间范围：
+  - 滚动后的稳定等待
+  - 点击前停顿
+  - 按下保持时间
+  - 点击后停顿
+  - 每个目标之间的随机间隔
+  - 偶尔出现的更长停顿
+- 不收集数据，不保存账号信息，也不会把 Strava 页面内容发送到外部服务。
+
+### 安装方法
+
+1. 克隆或下载仓库：
+
+   ```bash
+   git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
+   ```
+
+2. 打开 Chrome，进入：
+
+   ```text
+   chrome://extensions
+   ```
+
+3. 打开右上角的 **Developer mode**。
+4. 点击 **Load unpacked**。
+5. 选择 `strava-auto-kudos` 文件夹。
+6. 打开或刷新 Strava：
+
+   ```text
+   https://www.strava.com/
+   ```
+
+### 使用方法
+
+1. 在 Chrome 中登录 Strava。
+2. 打开 Strava 动态页，例如：
+
+   ```text
+   https://www.strava.com/dashboard
+   ```
+
+3. 点击浏览器工具栏里的 **Strava Auto Kudos** 扩展图标。
+4. 点击 **Give kudos**。
+5. 保持当前 Strava 标签页打开，等待扩展处理已加载动态里的 kudos 按钮。
+
+如果你在安装或重新加载扩展之前已经打开了 Strava 页面，请先刷新 Strava 标签页，否则 Chrome 可能还没有注入 content script。
+
+### 注意事项
+
+这个项目是个人便利工具。请根据 Strava 的平台规则和账号限制合理使用，不要用于刷量、骚扰或任何违反平台规则的行为。
+
 ## What It Does
 
 - Finds Strava kudos buttons with `button[data-testid="kudos_button"]`.

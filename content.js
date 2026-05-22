@@ -33,6 +33,10 @@
     value: 7,
     unit: "days"
   });
+  const DEFAULT_RELATIONSHIP_FILTER = Object.freeze({
+    mode: "connected"
+  });
+  const RELATIONSHIP_FILTER_MODES = Object.freeze(["connected", "any"]);
   const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
   const DATE_RANGE_LIMITS = Object.freeze({
     days: 3650,
@@ -221,6 +225,12 @@
       unit,
       cutoffTimestamp: cutoffForDateRange(new Date(), value, unit).getTime()
     };
+  }
+
+  function normalizeRelationshipFilter(settings) {
+    const filter = settings && settings.relationshipFilter ? settings.relationshipFilter : null;
+    const mode = filter && RELATIONSHIP_FILTER_MODES.includes(filter.mode) ? filter.mode : DEFAULT_RELATIONSHIP_FILTER.mode;
+    return { mode };
   }
 
   function classTextFor(element) {
@@ -542,6 +552,70 @@
 
     const fallbackText = activityFallbackText(entry, button);
     return fallbackText ? `feed:${simpleHash(fallbackText)}` : "";
+  }
+
+  function controlTextFor(element) {
+    return normalizeDateText([
+      element.getAttribute("aria-label"),
+      element.getAttribute("title"),
+      element.textContent
+    ].filter(Boolean).join(" "));
+  }
+
+  function entryHasFollowAction(entry) {
+    const controls = Array.from(entry.querySelectorAll('button, a, [role="button"]'));
+
+    return controls.some((control) => {
+      const text = controlTextFor(control).toLowerCase();
+      if (!text) {
+        return false;
+      }
+
+      if (/following|unfollow|subscribed|unsubscribe/.test(text)) {
+        return false;
+      }
+
+      if (/^follow(?:\s|$)|^subscribe(?:\s|$)/.test(text)) {
+        return true;
+      }
+
+      return /^(\u5173\u6ce8|\u95dc\u6ce8)$/.test(text) ||
+        /\u52a0\u4e3a\u5173\u6ce8|\u52a0\u70ba\u95dc\u6ce8/.test(text);
+    });
+  }
+
+  function entryHasFollowerSignal(text) {
+    const lower = text.toLowerCase();
+    return /follows you|following you|subscribes to you|subscriber/.test(lower) ||
+      /\u5173\u6ce8\u4e86\u4f60|\u5173\u6ce8\u4f60|\u95dc\u6ce8\u4e86\u4f60|\u95dc\u6ce8\u4f60|\u8ffd\u8e64\u4e86\u4f60|\u8ffd\u8e64\u4f60/.test(text);
+  }
+
+  function entryHasSuggestedOrPromotedSignal(text) {
+    const lower = text.toLowerCase();
+    return /suggested|recommended|people you may know|sponsored|promoted|advertisement/.test(lower) ||
+      /\u63a8\u8350|\u63a8\u85a6|\u8d5e\u52a9|\u8b9a\u52a9|\u5e7f\u544a|\u5ee3\u544a|\u63a8\u5e7f|\u63a8\u5ee3|\u4f60\u53ef\u80fd\u8ba4\u8bc6|\u4f60\u53ef\u80fd\u8a8d\u8b58/.test(text);
+  }
+
+  function relationshipStatusForButton(button, relationshipFilter) {
+    if (!relationshipFilter || relationshipFilter.mode === "any") {
+      return "include";
+    }
+
+    const entry = feedEntryForButton(button);
+    if (!entry) {
+      return "unknown";
+    }
+
+    const text = normalizeDateText(entry.innerText || entry.textContent);
+    if (entryHasFollowerSignal(text)) {
+      return "include";
+    }
+
+    if (entryHasFollowAction(entry) || entryHasSuggestedOrPromotedSignal(text)) {
+      return "not-connected";
+    }
+
+    return "include";
   }
 
   function createHandledActivityCache(entries) {
@@ -1064,6 +1138,7 @@
       skippedOutOfDate: 0,
       skippedUnknownDate: 0,
       skippedCached: 0,
+      skippedRelationship: 0,
       errors: 0,
       stopped: false,
       stopRequestedAt: null,
@@ -1085,13 +1160,14 @@
       hiddenSince: null,
       delayRangeMs: betweenTargets,
       dateRange,
+      relationshipFilter: null,
       startedAt: Date.now(),
       finishedAt: null,
       durationMs: null
     };
   }
 
-  async function processButton(button, metrics, dateRange, handledCache) {
+  async function processButton(button, metrics, dateRange, handledCache, relationshipFilter) {
     if (runState.cancelRequested) {
       return false;
     }
@@ -1111,6 +1187,12 @@
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
       await markActivityHandled(handledCache, activityKey, metrics);
+      return true;
+    }
+
+    const relationshipStatus = relationshipStatusForButton(button, relationshipFilter);
+    if (relationshipStatus !== "include") {
+      metrics.skippedRelationship += 1;
       return true;
     }
 
@@ -1141,6 +1223,12 @@
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
       await markActivityHandled(handledCache, activityKey, metrics);
+      return true;
+    }
+
+    const settledRelationshipStatus = relationshipStatusForButton(button, relationshipFilter);
+    if (settledRelationshipStatus !== "include") {
+      metrics.skippedRelationship += 1;
       return true;
     }
 
@@ -1213,7 +1301,7 @@
       Date.now() - requestedAt <= AUTO_REFRESH_PROFILE.resumeTtlMs;
   }
 
-  function resumeMetrics(record, betweenTargets, dateRange) {
+  function resumeMetrics(record, betweenTargets, dateRange, relationshipFilter) {
     const restored = {
       ...createMetrics(0, betweenTargets, dateRange),
       ...(record && record.metrics ? record.metrics : {})
@@ -1221,6 +1309,7 @@
 
     restored.delayRangeMs = betweenTargets;
     restored.dateRange = dateRange;
+    restored.relationshipFilter = relationshipFilter;
     restored.autoRefreshPending = false;
     restored.resumedAfterRefresh = true;
     restored.resumeCount = Number(restored.resumeCount || 0) + 1;
@@ -1296,7 +1385,7 @@
     }
   }
 
-  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, settings) {
+  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter, settings) {
     let idleScrollAttempts = 0;
     let pageTouchedFeed = false;
     let pageMadeWork = false;
@@ -1379,7 +1468,7 @@
         try {
           const beforeClicked = metrics.clicked;
           const beforeCachedActivities = metrics.cachedActivitiesAdded;
-          await processButton(button, metrics, dateRange, handledCache);
+          await processButton(button, metrics, dateRange, handledCache, relationshipFilter);
           if (metrics.clicked > beforeClicked || metrics.cachedActivitiesAdded > beforeCachedActivities) {
             pageMadeWork = true;
           }
@@ -1432,13 +1521,15 @@
 
     const betweenTargets = normalizeBetweenTargetsRange(settings);
     const dateRange = normalizeDateRange(settings);
-    const metrics = resumeRecord ? resumeMetrics(resumeRecord, betweenTargets, dateRange) : createMetrics(0, betweenTargets, dateRange);
+    const relationshipFilter = normalizeRelationshipFilter(settings);
+    const metrics = resumeRecord ? resumeMetrics(resumeRecord, betweenTargets, dateRange, relationshipFilter) : createMetrics(0, betweenTargets, dateRange);
     const paceState = createPaceState();
     const processedButtons = new WeakSet();
     paceState.betweenTargets = betweenTargets;
+    metrics.relationshipFilter = relationshipFilter;
     runState.activeMetrics = metrics;
 
-    executeKudosSequence(metrics, paceState, processedButtons, dateRange, settings);
+    executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter, settings);
 
     return {
       ok: true,

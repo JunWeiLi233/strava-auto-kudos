@@ -163,6 +163,12 @@
         gap: 8px;
       }
 
+      .single-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
       label {
         display: grid;
         gap: 4px;
@@ -244,6 +250,18 @@
               <option value="days" data-i18n="daysOption">days</option>
               <option value="months" data-i18n="monthsOption">months</option>
               <option value="years" data-i18n="yearsOption">years</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset class="settings">
+        <legend data-i18n="relationshipLegend">Relationship</legend>
+        <div class="single-row">
+          <label for="relationshipFilterMode">
+            <span data-i18n="relationshipFilterLabel">Filter</span>
+            <select id="relationshipFilterMode">
+              <option value="connected" data-i18n="relationshipConnectedOption">Following / follows me only</option>
+              <option value="any" data-i18n="relationshipAnyOption">Any visible activity</option>
             </select>
           </label>
         </div>

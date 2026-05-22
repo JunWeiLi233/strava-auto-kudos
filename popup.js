@@ -17,11 +17,15 @@
     value: 7,
     unit: "days"
   });
+  const DEFAULT_RELATIONSHIP_FILTER = Object.freeze({
+    mode: "connected"
+  });
   const DELAY_LIMIT_SECONDS = Object.freeze({
     min: 0.8,
     max: 120
   });
   const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
+  const RELATIONSHIP_FILTER_MODES = Object.freeze(["connected", "any"]);
   const DATE_RANGE_LIMITS = Object.freeze({
     days: 3650,
     months: 120,
@@ -42,6 +46,10 @@
       dateLastOption: "Last",
       dateRangeLabel: "Range",
       dateUnitLabel: "Unit",
+      relationshipLegend: "Relationship",
+      relationshipFilterLabel: "Filter",
+      relationshipConnectedOption: "Following / follows me only",
+      relationshipAnyOption: "Any visible activity",
       daysOption: "days",
       monthsOption: "months",
       yearsOption: "years",
@@ -58,8 +66,8 @@
       dateRangeLimitError: "Date range must be {limit} {unit} or less.",
       noConfirmationStatus: "No kudos run confirmation received.",
       startedStatus: "Kudos started. You can use other windows while the Strava tab stays open.",
-      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; cache skips {cached}, refreshes {refreshes}.",
-      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; cache skips {cached}, refreshes {refreshes}.",
+      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
+      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "button",
@@ -75,6 +83,8 @@
       invalidDelay: "Invalid delay range.",
       dateSaved: "Date filter saved.",
       invalidDate: "Invalid date filter.",
+      relationshipSaved: "Relationship filter saved.",
+      invalidRelationship: "Invalid relationship filter.",
       noRunningStatus: "No kudos sequence is running.",
       openStravaStatus: "Open Strava to run kudos.",
       alreadyRunningStatus: "Kudos sequence is already running.",
@@ -94,6 +104,10 @@
       dateLastOption: "最近",
       dateRangeLabel: "范围",
       dateUnitLabel: "单位",
+      relationshipLegend: "关系过滤",
+      relationshipFilterLabel: "过滤",
+      relationshipConnectedOption: "仅关注 / 关注我的人",
+      relationshipAnyOption: "任何可见动态",
       daysOption: "天",
       monthsOption: "个月",
       yearsOption: "年",
@@ -110,8 +124,8 @@
       dateRangeLimitError: "日期范围不能超过 {limit} {unit}。",
       noConfirmationStatus: "没有收到 kudos 运行确认。",
       startedStatus: "Kudos 已开始。保持 Strava 标签页打开后，你可以使用其他窗口。",
-      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；缓存跳过 {cached} 个，刷新 {refreshes} 次。",
-      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；缓存跳过 {cached} 个，刷新 {refreshes} 次。",
+      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
+      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "按钮",
@@ -127,6 +141,8 @@
       invalidDelay: "间隔范围无效。",
       dateSaved: "日期过滤已保存。",
       invalidDate: "日期过滤无效。",
+      relationshipSaved: "关系过滤已保存。",
+      invalidRelationship: "关系过滤无效。",
       noRunningStatus: "当前没有正在运行的 kudos 流程。",
       openStravaStatus: "请打开 Strava 后再运行 kudos。",
       alreadyRunningStatus: "Kudos 流程已经在运行。",
@@ -142,6 +158,7 @@
   const dateRangeMode = document.getElementById("dateRangeMode");
   const dateRangeValue = document.getElementById("dateRangeValue");
   const dateRangeUnit = document.getElementById("dateRangeUnit");
+  const relationshipFilterMode = document.getElementById("relationshipFilterMode");
   const statusText = document.getElementById("status");
   const statusDot = document.getElementById("statusDot");
   let currentLanguage = loadLanguage();
@@ -304,6 +321,18 @@
     });
   }
 
+  function loadRelationshipFilterSettings() {
+    const stored = loadStoredSettings();
+    const mode = RELATIONSHIP_FILTER_MODES.includes(stored.relationshipFilterMode) ? stored.relationshipFilterMode : DEFAULT_RELATIONSHIP_FILTER.mode;
+    return { mode };
+  }
+
+  function saveRelationshipFilterSettings(filter) {
+    saveStoredSettings({
+      relationshipFilterMode: filter.mode
+    });
+  }
+
   function setDateRangeControlsEnabled() {
     const isActive = dateRangeMode.value === "last";
     dateRangeValue.disabled = !isActive;
@@ -316,6 +345,11 @@
     dateRangeValue.value = String(range.value);
     dateRangeUnit.value = range.unit;
     setDateRangeControlsEnabled();
+  }
+
+  function applyRelationshipFilterSettingsToInputs() {
+    const filter = loadRelationshipFilterSettings();
+    relationshipFilterMode.value = filter.mode;
   }
 
   function unitLabel(unit) {
@@ -393,6 +427,17 @@
     return normalized;
   }
 
+  function readRelationshipFilterSettings() {
+    const mode = RELATIONSHIP_FILTER_MODES.includes(relationshipFilterMode.value) ? relationshipFilterMode.value : null;
+    if (!mode) {
+      throw new Error(t("invalidRelationship"));
+    }
+
+    const normalized = { mode };
+    saveRelationshipFilterSettings(normalized);
+    return normalized;
+  }
+
   function buildRunSettings() {
     const range = readDelaySettings();
     return {
@@ -400,7 +445,8 @@
         min: Math.round(range.min * 1000),
         max: Math.round(range.max * 1000)
       },
-      dateRange: readDateRangeSettings()
+      dateRange: readDateRangeSettings(),
+      relationshipFilter: readRelationshipFilterSettings()
     };
   }
 
@@ -436,7 +482,8 @@
       Number(metrics.skippedMissing || 0) +
       Number(metrics.skippedOutOfDate || 0) +
       Number(metrics.skippedUnknownDate || 0) +
-      Number(metrics.skippedCached || 0);
+      Number(metrics.skippedCached || 0) +
+      Number(metrics.skippedRelationship || 0);
   }
 
   function knownMessageKey(message) {
@@ -472,6 +519,7 @@
     const scanned = Number(metrics.scanned || 0);
     const skipped = skippedCount(metrics);
     const cached = Number(metrics.skippedCached || 0);
+    const relationship = Number(metrics.skippedRelationship || 0);
     const refreshes = Number(metrics.refreshes || 0);
 
     if (metrics.stopped) {
@@ -482,6 +530,7 @@
           clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"),
           scanned,
           skipped,
+          relationship,
           cached,
           refreshes
         }
@@ -508,6 +557,7 @@
         scanned,
         buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"),
         skipped,
+        relationship,
         cached,
         refreshes
       }
@@ -603,6 +653,15 @@
     }
   }
 
+  function saveRelationshipFilterFromInputs() {
+    try {
+      readRelationshipFilterSettings();
+      setStatusKey("relationshipSaved", "ready");
+    } catch (error) {
+      setStatusText(error.message || t("invalidRelationship"), "error");
+    }
+  }
+
   runButton.addEventListener("click", run);
   stopButton.addEventListener("click", stop);
   languageButton.addEventListener("click", toggleLanguage);
@@ -611,8 +670,10 @@
   dateRangeMode.addEventListener("change", saveDateRangeFromInputs);
   dateRangeValue.addEventListener("change", saveDateRangeFromInputs);
   dateRangeUnit.addEventListener("change", saveDateRangeFromInputs);
+  relationshipFilterMode.addEventListener("change", saveRelationshipFilterFromInputs);
   applyLanguage();
   applyDelaySettingsToInputs();
   applyDateRangeSettingsToInputs();
+  applyRelationshipFilterSettingsToInputs();
   refreshStatus();
 })();

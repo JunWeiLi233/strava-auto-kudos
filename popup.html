@@ -71,6 +71,12 @@
         box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.16);
       }
 
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 78px;
+        gap: 8px;
+      }
+
       button {
         width: 100%;
         min-height: 40px;
@@ -85,6 +91,16 @@
 
       button:hover {
         background: var(--accent-dark);
+      }
+
+      button.secondary {
+        border: 1px solid #f2b8ae;
+        background: #fff7f4;
+        color: #b42318;
+      }
+
+      button.secondary:hover {
+        background: #ffe8e1;
       }
 
       button:focus-visible {
@@ -113,7 +129,10 @@
         <h1>Strava Kudos</h1>
         <span id="statusDot" class="status-dot" data-state="ready" aria-hidden="true"></span>
       </header>
-      <button id="runButton" type="button">Give kudos</button>
+      <div class="controls">
+        <button id="runButton" type="button">Give kudos</button>
+        <button id="stopButton" class="secondary" type="button" disabled>Stop</button>
+      </div>
       <p id="status" role="status" aria-live="polite">Ready on Strava.</p>
     </main>
     <script src="popup.js"></script>

@@ -39,7 +39,7 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 下载类似下面名字的文件：
 
 ```text
-strava-auto-kudos-v1.0.1.zip
+strava-auto-kudos-v1.0.2.zip
 ```
 
 解压后，请确认你选择的文件夹里面能直接看到 `manifest.json`。
@@ -47,7 +47,7 @@ strava-auto-kudos-v1.0.1.zip
 正确结构应该是：
 
 ```text
-strava-auto-kudos-v1.0.1/
+strava-auto-kudos-v1.0.2/
   manifest.json
   popup.html
   popup.js
@@ -65,7 +65,7 @@ strava-auto-kudos-v1.0.1/
 
 2. 打开右上角的 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.1` 文件夹。
+4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.2` 文件夹。
 5. 打开或刷新 Strava：
 
    ```text
@@ -111,6 +111,7 @@ git pull
 3. 点击浏览器工具栏里的 **Strava Auto Kudos** 扩展图标。
 4. 点击 **Give kudos**。
 5. 保持当前 Strava 标签页打开，等待扩展处理已加载动态里的 kudos 按钮。
+6. 如果想中途停止，重新打开扩展弹窗并点击 **Stop**。
 
 如果你在安装或重新加载扩展之前已经打开了 Strava 页面，请先刷新 Strava 标签页，否则 Chrome 可能还没有注入 content script。
 
@@ -120,6 +121,9 @@ git pull
 - Skips disabled buttons.
 - Checks button state before clicking so already-given kudos are not clicked again.
 - Uses randomized timing instead of static pauses:
+  - pre-scroll looking delay
+  - uneven wheel-like scroll steps
+  - occasional mid-scroll hesitation
   - scroll settle delay
   - pre-click dwell delay
   - press-hold delay
@@ -127,6 +131,7 @@ git pull
   - between-target delay
   - occasional longer pauses
 - Simulates a more natural interaction path with hover, move, focus, pointer down, pointer up, mouse events, and the native `button.click()`.
+- Includes a **Stop** button that requests cancellation while the sequence is running.
 - Returns a popup summary showing how many kudos buttons were scanned, clicked, and skipped.
 
 ## Files
@@ -165,7 +170,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 2. Download the package named like:
 
    ```text
-   strava-auto-kudos-v1.0.1.zip
+   strava-auto-kudos-v1.0.2.zip
    ```
 
 3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
@@ -173,7 +178,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 4. Confirm the folder you will load contains `manifest.json` directly:
 
    ```text
-   strava-auto-kudos-v1.0.1/
+   strava-auto-kudos-v1.0.2/
      manifest.json
      popup.html
      popup.js
@@ -248,6 +253,7 @@ Then reload the extension from `chrome://extensions`.
 3. Click the **Strava Auto Kudos** extension icon.
 4. Press **Give kudos**.
 5. Leave the tab open while the extension scrolls through visible feed items and processes available kudos buttons.
+6. To interrupt an active run, open the popup again and press **Stop**.
 
 If Strava was already open before you installed or reloaded the extension, refresh the Strava tab once so Chrome injects the content script.
 
@@ -274,7 +280,7 @@ The content script then:
    - state-like data attributes
    - class names such as active, selected, filled, or kudoed
    - SVG fill/color signals that match Strava orange
-4. Smoothly scrolls the candidate button to the center of the viewport.
+4. Moves toward the candidate with uneven wheel-like scroll steps and occasional mid-scroll hesitation.
 5. Waits for a randomized settle period.
 6. Re-checks that the button is still connected, enabled, and unclicked.
 7. Dispatches pointer and mouse events around the native click.
@@ -286,11 +292,14 @@ The timing profile lives in `content.js`.
 
 ```js
 const TIMING_PROFILE = Object.freeze({
-  scrollSettle: { min: 450, max: 1250 },
-  preClickDwell: { min: 180, max: 850 },
+  preScrollLook: { min: 180, max: 720 },
+  scrollStepPause: { min: 55, max: 210 },
+  scrollHesitation: { min: 280, max: 960 },
+  scrollSettle: { min: 520, max: 1600 },
+  preClickDwell: { min: 240, max: 1150 },
   pressHold: { min: 45, max: 180 },
-  postClickDwell: { min: 220, max: 760 },
-  betweenTargets: { min: 1500, max: 3500 },
+  postClickDwell: { min: 320, max: 1050 },
+  betweenTargets: { min: 1700, max: 4600 },
   longPause: { min: 4200, max: 7800 },
   longPauseEvery: { min: 4, max: 7 }
 });

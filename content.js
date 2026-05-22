@@ -2,19 +2,27 @@
   "use strict";
 
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
+  const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
+  const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
   const TARGET_SELECTOR = 'button[data-testid="kudos_button"]';
   const TIMING_PROFILE = Object.freeze({
-    scrollSettle: { min: 450, max: 1250 },
-    preClickDwell: { min: 180, max: 850 },
+    preScrollLook: { min: 180, max: 720 },
+    scrollStepPause: { min: 55, max: 210 },
+    scrollHesitation: { min: 280, max: 960 },
+    scrollSettle: { min: 520, max: 1600 },
+    preClickDwell: { min: 240, max: 1150 },
     pressHold: { min: 45, max: 180 },
-    postClickDwell: { min: 220, max: 760 },
-    betweenTargets: { min: 1500, max: 3500 },
+    postClickDwell: { min: 320, max: 1050 },
+    betweenTargets: { min: 1700, max: 4600 },
     longPause: { min: 4200, max: 7800 },
     longPauseEvery: { min: 4, max: 7 }
   });
 
   const runState = {
-    running: false
+    running: false,
+    cancelRequested: false,
+    activeMetrics: null,
+    lastMetrics: null
   };
 
   function sleep(ms) {
@@ -27,8 +35,32 @@
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  function randomFloat(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+
+  function chance(probability) {
+    return Math.random() < probability;
+  }
+
   function randomDelay(range) {
     return sleep(randomInteger(range.min, range.max));
+  }
+
+  async function cancellableDelay(range) {
+    const total = randomInteger(range.min, range.max);
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < total) {
+      if (runState.cancelRequested) {
+        return false;
+      }
+
+      const remaining = total - (Date.now() - startedAt);
+      await sleep(Math.min(remaining, randomInteger(70, 180)));
+    }
+
+    return !runState.cancelRequested;
   }
 
   function createPaceState() {
@@ -38,15 +70,17 @@
   }
 
   async function pauseBetweenTargets(paceState) {
-    await randomDelay(TIMING_PROFILE.betweenTargets);
+    if (!(await cancellableDelay(TIMING_PROFILE.betweenTargets))) {
+      return false;
+    }
 
     paceState.interactionsUntilLongPause -= 1;
     if (paceState.interactionsUntilLongPause > 0) {
-      return;
+      return true;
     }
 
     paceState.interactionsUntilLongPause = randomInteger(TIMING_PROFILE.longPauseEvery.min, TIMING_PROFILE.longPauseEvery.max);
-    await randomDelay(TIMING_PROFILE.longPause);
+    return cancellableDelay(TIMING_PROFILE.longPause);
   }
 
   function classTextFor(element) {
@@ -188,6 +222,51 @@
     return hasPressedState(button) || labelIndicatesClicked(button) || hasFilledClassSignal(button) || graphicLooksFilled(button);
   }
 
+  function pageScrollY() {
+    return window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+  }
+
+  function dispatchWheelGesture(deltaY) {
+    const clientX = randomInteger(Math.floor(window.innerWidth * 0.38), Math.floor(window.innerWidth * 0.62));
+    const clientY = randomInteger(Math.floor(window.innerHeight * 0.34), Math.floor(window.innerHeight * 0.68));
+
+    document.dispatchEvent(new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      view: window,
+      deltaX: 0,
+      deltaY,
+      deltaMode: 0,
+      clientX,
+      clientY
+    }));
+  }
+
+  function scrollStepToward(button, desiredTop) {
+    const rect = button.getBoundingClientRect();
+    const distance = rect.top - desiredTop;
+
+    if (Math.abs(distance) < randomInteger(22, 58)) {
+      return true;
+    }
+
+    const direction = Math.sign(distance);
+    const magnitude = Math.min(Math.abs(distance), randomInteger(90, 360));
+    const eased = Math.max(18, Math.round(magnitude * randomFloat(0.48, 0.96)));
+    const deltaY = direction * eased;
+    const beforeY = pageScrollY();
+
+    dispatchWheelGesture(deltaY);
+    window.scrollBy({
+      top: deltaY,
+      left: 0,
+      behavior: "auto"
+    });
+
+    return Math.abs(pageScrollY() - beforeY) < 1 && Math.abs(distance) < 140;
+  }
+
   function interactionPointFor(element) {
     const rect = element.getBoundingClientRect();
     const horizontalInset = Math.min(rect.width * 0.22, 10);
@@ -245,14 +324,33 @@
     dispatchMouseEvent(element, `mouse${type}`, point, buttons);
   }
 
-  async function scrollAndSettle(button) {
-    button.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-      inline: "nearest"
-    });
+  async function humanScrollToElement(button) {
+    if (!(await cancellableDelay(TIMING_PROFILE.preScrollLook))) {
+      return false;
+    }
 
-    await randomDelay(TIMING_PROFILE.scrollSettle);
+    const desiredTop = randomInteger(Math.floor(window.innerHeight * 0.34), Math.floor(window.innerHeight * 0.58));
+
+    for (let stepCount = 0; stepCount < 32; stepCount += 1) {
+      if (runState.cancelRequested || !button.isConnected) {
+        return false;
+      }
+
+      const arrived = scrollStepToward(button, desiredTop);
+      if (arrived) {
+        break;
+      }
+
+      if (!(await cancellableDelay(TIMING_PROFILE.scrollStepPause))) {
+        return false;
+      }
+
+      if (chance(0.18) && !(await cancellableDelay(TIMING_PROFILE.scrollHesitation))) {
+        return false;
+      }
+    }
+
+    return cancellableDelay(TIMING_PROFILE.scrollSettle);
   }
 
   async function performHumanPacedClick(button) {
@@ -261,7 +359,9 @@
     dispatchPointerAndMouse(button, "over", point, 0);
     dispatchPointerAndMouse(button, "move", point, 0);
 
-    await randomDelay(TIMING_PROFILE.preClickDwell);
+    if (!(await cancellableDelay(TIMING_PROFILE.preClickDwell))) {
+      return false;
+    }
 
     try {
       button.focus({ preventScroll: true });
@@ -270,12 +370,19 @@
     }
 
     dispatchPointerAndMouse(button, "down", point, 1);
-    await randomDelay(TIMING_PROFILE.pressHold);
+    if (!(await cancellableDelay(TIMING_PROFILE.pressHold))) {
+      dispatchPointerAndMouse(button, "up", point, 0);
+      return false;
+    }
     dispatchPointerAndMouse(button, "up", point, 0);
+
+    if (runState.cancelRequested) {
+      return false;
+    }
 
     button.click();
 
-    await randomDelay(TIMING_PROFILE.postClickDwell);
+    return cancellableDelay(TIMING_PROFILE.postClickDwell);
   }
 
   function getCandidateButtons() {
@@ -292,6 +399,8 @@
       skippedDisabled: 0,
       skippedMissing: 0,
       errors: 0,
+      stopped: false,
+      stopRequestedAt: null,
       startedAt: Date.now(),
       finishedAt: null,
       durationMs: null
@@ -299,40 +408,82 @@
   }
 
   async function processButton(button, metrics) {
+    if (runState.cancelRequested) {
+      return false;
+    }
+
     if (!button.isConnected) {
       metrics.skippedMissing += 1;
-      return;
+      return true;
     }
 
     if (isDisabled(button)) {
       metrics.skippedDisabled += 1;
-      return;
+      return true;
     }
 
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
-      return;
+      return true;
     }
 
-    await scrollAndSettle(button);
+    if (!(await humanScrollToElement(button))) {
+      return false;
+    }
 
     if (!button.isConnected) {
       metrics.skippedMissing += 1;
-      return;
+      return true;
     }
 
     if (isDisabled(button)) {
       metrics.skippedDisabled += 1;
-      return;
+      return true;
     }
 
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
-      return;
+      return true;
     }
 
-    await performHumanPacedClick(button);
+    if (!(await performHumanPacedClick(button))) {
+      return false;
+    }
+
     metrics.clicked += 1;
+    return true;
+  }
+
+  function statusResult() {
+    return {
+      ok: true,
+      state: {
+        running: runState.running,
+        cancelRequested: runState.cancelRequested,
+        metrics: runState.activeMetrics || runState.lastMetrics
+      }
+    };
+  }
+
+  function stopKudosSequence() {
+    if (!runState.running) {
+      return {
+        ok: false,
+        message: "No kudos sequence is running.",
+        state: statusResult().state
+      };
+    }
+
+    runState.cancelRequested = true;
+    if (runState.activeMetrics && !runState.activeMetrics.stopRequestedAt) {
+      runState.activeMetrics.stopRequestedAt = Date.now();
+    }
+
+    return {
+      ok: true,
+      message: "Stop requested. The sequence will stop before the next kudos click.",
+      state: statusResult().state
+    };
   }
 
   async function runKudosSequence() {
@@ -345,37 +496,67 @@
     }
 
     runState.running = true;
+    runState.cancelRequested = false;
 
     const buttons = getCandidateButtons();
     const metrics = createMetrics(buttons.length);
     const paceState = createPaceState();
+    runState.activeMetrics = metrics;
 
     try {
       for (const button of buttons) {
+        if (runState.cancelRequested) {
+          break;
+        }
+
         try {
           await processButton(button, metrics);
         } catch (_error) {
           metrics.errors += 1;
-        } finally {
-          await pauseBetweenTargets(paceState);
+        }
+
+        if (runState.cancelRequested) {
+          break;
+        }
+
+        if (!(await pauseBetweenTargets(paceState))) {
+          break;
         }
       }
 
+      metrics.stopped = runState.cancelRequested;
       metrics.finishedAt = Date.now();
       metrics.durationMs = metrics.finishedAt - metrics.startedAt;
+      runState.lastMetrics = metrics;
 
       return {
         ok: true,
-        message: "Kudos sequence completed.",
+        message: metrics.stopped ? "Kudos sequence stopped." : "Kudos sequence completed.",
         metrics
       };
     } finally {
       runState.running = false;
+      runState.cancelRequested = false;
+      runState.activeMetrics = null;
     }
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || message.action !== ACTION_RUN_KUDOS) {
+    if (!message || !message.action) {
+      return false;
+    }
+
+    if (message.action === ACTION_STATUS_KUDOS) {
+      sendResponse(statusResult());
+      return false;
+    }
+
+    if (message.action === ACTION_STOP_KUDOS) {
+      sendResponse(stopKudosSequence());
+      return false;
+    }
+
+    if (message.action !== ACTION_RUN_KUDOS) {
       return false;
     }
 

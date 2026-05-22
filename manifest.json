@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Strava Auto Kudos",
+  "version": "1.0.0",
+  "description": "Clicks unselected Strava kudos buttons from the active dashboard feed.",
+  "homepage_url": "https://github.com/JunWeiLi233/strava-auto-kudos",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://www.strava.com/*"
+  ],
+  "action": {
+    "default_title": "Strava Auto Kudos",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.strava.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

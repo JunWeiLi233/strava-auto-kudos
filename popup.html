@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Strava Auto Kudos</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --accent: #fc4c02;
+        --accent-dark: #d53f00;
+        --ink: #1f2933;
+        --muted: #627184;
+        --line: #dde3ea;
+        --surface: #ffffff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 264px;
+        margin: 0;
+        background: var(--surface);
+        color: var(--ink);
+        font: 13px/1.4 Arial, Helvetica, sans-serif;
+      }
+
+      main {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #9aa8b6;
+        box-shadow: 0 0 0 3px rgba(154, 168, 182, 0.16);
+        flex: 0 0 auto;
+      }
+
+      .status-dot[data-state="ready"] {
+        background: #2f8f55;
+        box-shadow: 0 0 0 3px rgba(47, 143, 85, 0.16);
+      }
+
+      .status-dot[data-state="busy"] {
+        background: var(--accent);
+        box-shadow: 0 0 0 3px rgba(252, 76, 2, 0.16);
+      }
+
+      .status-dot[data-state="error"] {
+        background: #b42318;
+        box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.16);
+      }
+
+      button {
+        width: 100%;
+        min-height: 40px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #ffffff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+      }
+
+      button:hover {
+        background: var(--accent-dark);
+      }
+
+      button:focus-visible {
+        outline: 2px solid #111827;
+        outline-offset: 2px;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.68;
+      }
+
+      #status {
+        min-height: 34px;
+        margin: 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Strava Kudos</h1>
+        <span id="statusDot" class="status-dot" data-state="ready" aria-hidden="true"></span>
+      </header>
+      <button id="runButton" type="button">Give kudos</button>
+      <p id="status" role="status" aria-live="polite">Ready on Strava.</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

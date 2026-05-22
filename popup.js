@@ -58,8 +58,8 @@
       dateRangeLimitError: "Date range must be {limit} {unit} or less.",
       noConfirmationStatus: "No kudos run confirmation received.",
       startedStatus: "Kudos started. You can use other windows while the Strava tab stays open.",
-      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}.",
-      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}.",
+      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; cache skips {cached}, refreshes {refreshes}.",
+      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; cache skips {cached}, refreshes {refreshes}.",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "button",
@@ -110,8 +110,8 @@
       dateRangeLimitError: "日期范围不能超过 {limit} {unit}。",
       noConfirmationStatus: "没有收到 kudos 运行确认。",
       startedStatus: "Kudos 已开始。保持 Strava 标签页打开后，你可以使用其他窗口。",
-      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个。",
-      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个。",
+      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；缓存跳过 {cached} 个，刷新 {refreshes} 次。",
+      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；缓存跳过 {cached} 个，刷新 {refreshes} 次。",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "按钮",
@@ -435,7 +435,8 @@
       Number(metrics.skippedDisabled || 0) +
       Number(metrics.skippedMissing || 0) +
       Number(metrics.skippedOutOfDate || 0) +
-      Number(metrics.skippedUnknownDate || 0);
+      Number(metrics.skippedUnknownDate || 0) +
+      Number(metrics.skippedCached || 0);
   }
 
   function knownMessageKey(message) {
@@ -470,6 +471,8 @@
     const clicked = Number(metrics.clicked || 0);
     const scanned = Number(metrics.scanned || 0);
     const skipped = skippedCount(metrics);
+    const cached = Number(metrics.skippedCached || 0);
+    const refreshes = Number(metrics.refreshes || 0);
 
     if (metrics.stopped) {
       return {
@@ -478,7 +481,9 @@
           clicked,
           clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"),
           scanned,
-          skipped
+          skipped,
+          cached,
+          refreshes
         }
       };
     }
@@ -502,7 +507,9 @@
         clicked,
         scanned,
         buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"),
-        skipped
+        skipped,
+        cached,
+        refreshes
       }
     };
   }

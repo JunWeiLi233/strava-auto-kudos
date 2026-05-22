@@ -9,6 +9,8 @@
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
+  const HANDLED_ACTIVITY_CACHE_KEY = "stravaAutoKudosHandledActivityCacheV1";
+  const RESUME_RUN_KEY = "stravaAutoKudosResumeRunV1";
   const TARGET_SELECTOR = 'button[data-testid="give_kudos_button"], button[data-testid="kudos_button"]';
   const TIMING_PROFILE = Object.freeze({
     preScrollLook: { min: 180, max: 720 },
@@ -44,6 +46,16 @@
   const BACKGROUND_DISCOVERY_PROFILE = Object.freeze({
     hiddenDiscoveryBackoff: { min: 2500, max: 5500 }
   });
+  const ACTIVITY_CACHE_PROFILE = Object.freeze({
+    maxItems: 2500,
+    flushEvery: 5
+  });
+  const AUTO_REFRESH_PROFILE = Object.freeze({
+    maxRefreshes: 8,
+    maxNoNewWorkRefreshes: 2,
+    resumeTtlMs: 30 * 60 * 1000,
+    resumeSettle: { min: 1600, max: 3200 }
+  });
 
   const runState = {
     running: false,
@@ -72,6 +84,50 @@
 
   function randomDelay(range) {
     return sleep(randomInteger(range.min, range.max));
+  }
+
+  function storageLocalGet(key) {
+    return new Promise((resolve) => {
+      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) {
+        resolve(null);
+        return;
+      }
+
+      chrome.storage.local.get(key, (items) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+          return;
+        }
+
+        resolve(items ? items[key] : null);
+      });
+    });
+  }
+
+  function storageLocalSet(items) {
+    return new Promise((resolve) => {
+      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) {
+        resolve(false);
+        return;
+      }
+
+      chrome.storage.local.set(items, () => {
+        resolve(!chrome.runtime.lastError);
+      });
+    });
+  }
+
+  function storageLocalRemove(key) {
+    return new Promise((resolve) => {
+      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.local) {
+        resolve(false);
+        return;
+      }
+
+      chrome.storage.local.remove(key, () => {
+        resolve(!chrome.runtime.lastError);
+      });
+    });
   }
 
   async function cancellableDelay(range) {
@@ -424,6 +480,144 @@
   function markRecentActivityBoundary(metrics) {
     metrics.endedAtRecentActivityBoundary = true;
     metrics.recentActivityBoundarySeenAt = Date.now();
+  }
+
+  function feedEntryForButton(button) {
+    return button.closest('[data-testid="web-feed-entry"], article, [class*="feed-entry"]');
+  }
+
+  function activityIdFromHref(href) {
+    if (!href) {
+      return "";
+    }
+
+    try {
+      const parsed = new URL(href, window.location.href);
+      const match = /\/activities\/(\d+)/.exec(parsed.pathname);
+      return match ? match[1] : "";
+    } catch (_error) {
+      const match = /\/activities\/(\d+)/.exec(href);
+      return match ? match[1] : "";
+    }
+  }
+
+  function simpleHash(text) {
+    let hash = 2166136261;
+    const normalized = normalizeDateText(text);
+    for (let index = 0; index < normalized.length; index += 1) {
+      hash ^= normalized.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    return (hash >>> 0).toString(36);
+  }
+
+  function activityFallbackText(entry, button) {
+    if (!entry) {
+      return "";
+    }
+
+    const dateText = activityDateTextFor(button);
+    const links = Array.from(entry.querySelectorAll("a"))
+      .map((link) => normalizeDateText(link.href || link.textContent))
+      .filter(Boolean)
+      .slice(0, 6)
+      .join(" ");
+    const heading = normalizeDateText((entry.querySelector("h2, h3, [data-testid*='title']") || {}).textContent);
+
+    return normalizeDateText([dateText, heading, links].filter(Boolean).join(" "));
+  }
+
+  function activityKeyForButton(button) {
+    const entry = feedEntryForButton(button);
+    const searchRoot = entry || button;
+    const activityLinks = Array.from(searchRoot.querySelectorAll('a[href*="/activities/"]'));
+
+    for (const link of activityLinks) {
+      const activityId = activityIdFromHref(link.getAttribute("href") || link.href);
+      if (activityId) {
+        return `activity:${activityId}`;
+      }
+    }
+
+    const fallbackText = activityFallbackText(entry, button);
+    return fallbackText ? `feed:${simpleHash(fallbackText)}` : "";
+  }
+
+  function createHandledActivityCache(entries) {
+    return {
+      entries,
+      pendingWrites: 0
+    };
+  }
+
+  function pruneHandledActivityEntries(entries) {
+    if (entries.size <= ACTIVITY_CACHE_PROFILE.maxItems) {
+      return entries;
+    }
+
+    return new Map(Array.from(entries.entries())
+      .sort((left, right) => left[1] - right[1])
+      .slice(entries.size - ACTIVITY_CACHE_PROFILE.maxItems));
+  }
+
+  async function loadHandledActivityCache(metrics) {
+    const raw = await storageLocalGet(HANDLED_ACTIVITY_CACHE_KEY);
+    const rawItems = raw && Array.isArray(raw.items) ? raw.items : [];
+    const entries = new Map();
+
+    rawItems.forEach((item) => {
+      const key = item && item.key ? String(item.key) : "";
+      const handledAt = Number(item && item.handledAt);
+      if (key) {
+        entries.set(key, Number.isFinite(handledAt) ? handledAt : Date.now());
+      }
+    });
+
+    const cache = createHandledActivityCache(pruneHandledActivityEntries(entries));
+    metrics.cacheSize = cache.entries.size;
+    metrics.loadedCacheItems = cache.entries.size;
+    return cache;
+  }
+
+  async function persistHandledActivityCache(cache, metrics) {
+    if (!cache) {
+      return false;
+    }
+
+    cache.entries = pruneHandledActivityEntries(cache.entries);
+    cache.pendingWrites = 0;
+    if (metrics) {
+      metrics.cacheSize = cache.entries.size;
+    }
+
+    return storageLocalSet({
+      [HANDLED_ACTIVITY_CACHE_KEY]: {
+        version: 1,
+        updatedAt: Date.now(),
+        items: Array.from(cache.entries.entries()).map((entry) => ({
+          key: entry[0],
+          handledAt: entry[1]
+        }))
+      }
+    });
+  }
+
+  async function markActivityHandled(cache, activityKey, metrics) {
+    if (!cache || !activityKey || cache.entries.has(activityKey)) {
+      return false;
+    }
+
+    cache.entries.set(activityKey, Date.now());
+    cache.pendingWrites += 1;
+    metrics.cachedActivitiesAdded += 1;
+    metrics.cacheSize = cache.entries.size;
+
+    if (cache.pendingWrites >= ACTIVITY_CACHE_PROFILE.flushEvery) {
+      await persistHandledActivityCache(cache, metrics);
+    }
+
+    return true;
   }
 
   function applyTimeFromText(date, text) {
@@ -808,8 +1002,36 @@
     });
   }
 
-  function getUnprocessedCandidateButtons(processedButtons) {
-    return getCandidateButtons().filter((button) => !processedButtons.has(button));
+  function getUnprocessedCandidateButtons(processedButtons, handledCache, metrics) {
+    const buttons = [];
+    let sawCandidate = false;
+    let skippedCached = 0;
+
+    getCandidateButtons().forEach((button) => {
+      if (processedButtons.has(button)) {
+        return;
+      }
+
+      sawCandidate = true;
+      const activityKey = activityKeyForButton(button);
+      if (activityKey && handledCache && handledCache.entries.has(activityKey)) {
+        processedButtons.add(button);
+        skippedCached += 1;
+        return;
+      }
+
+      buttons.push(button);
+    });
+
+    if (skippedCached > 0) {
+      metrics.skippedCached += skippedCached;
+    }
+
+    return {
+      buttons,
+      sawCandidate,
+      skippedCached
+    };
   }
 
   function isLoginPage() {
@@ -841,6 +1063,7 @@
       skippedMissing: 0,
       skippedOutOfDate: 0,
       skippedUnknownDate: 0,
+      skippedCached: 0,
       errors: 0,
       stopped: false,
       stopRequestedAt: null,
@@ -849,6 +1072,15 @@
       cappedBySafetyLimit: false,
       endedAtRecentActivityBoundary: false,
       recentActivityBoundarySeenAt: null,
+      autoRefreshPending: false,
+      refreshes: 0,
+      refreshesWithoutNewWork: 0,
+      cappedByRefreshLimit: false,
+      resumedAfterRefresh: false,
+      resumeCount: 0,
+      loadedCacheItems: 0,
+      cachedActivitiesAdded: 0,
+      cacheSize: 0,
       hiddenDiscoveryBackoffs: 0,
       hiddenSince: null,
       delayRangeMs: betweenTargets,
@@ -859,10 +1091,12 @@
     };
   }
 
-  async function processButton(button, metrics, dateRange) {
+  async function processButton(button, metrics, dateRange, handledCache) {
     if (runState.cancelRequested) {
       return false;
     }
+
+    const activityKey = activityKeyForButton(button);
 
     if (!button.isConnected) {
       metrics.skippedMissing += 1;
@@ -876,6 +1110,7 @@
 
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
+      await markActivityHandled(handledCache, activityKey, metrics);
       return true;
     }
 
@@ -905,6 +1140,7 @@
 
     if (isAlreadyClicked(button)) {
       metrics.skippedAlreadyClicked += 1;
+      await markActivityHandled(handledCache, activityKey, metrics);
       return true;
     }
 
@@ -923,6 +1159,7 @@
     }
 
     metrics.clicked += 1;
+    await markActivityHandled(handledCache, activityKey, metrics);
     return true;
   }
 
@@ -960,6 +1197,92 @@
     };
   }
 
+  function serializableMetrics(metrics) {
+    return {
+      ...metrics,
+      autoRefreshPending: false,
+      finishedAt: null,
+      durationMs: null
+    };
+  }
+
+  function resumeRecordIsFresh(record) {
+    const requestedAt = Number(record && record.requestedAt);
+    return Boolean(record && record.pending) &&
+      Number.isFinite(requestedAt) &&
+      Date.now() - requestedAt <= AUTO_REFRESH_PROFILE.resumeTtlMs;
+  }
+
+  function resumeMetrics(record, betweenTargets, dateRange) {
+    const restored = {
+      ...createMetrics(0, betweenTargets, dateRange),
+      ...(record && record.metrics ? record.metrics : {})
+    };
+
+    restored.delayRangeMs = betweenTargets;
+    restored.dateRange = dateRange;
+    restored.autoRefreshPending = false;
+    restored.resumedAfterRefresh = true;
+    restored.resumeCount = Number(restored.resumeCount || 0) + 1;
+    restored.finishedAt = null;
+    restored.durationMs = null;
+
+    return restored;
+  }
+
+  async function clearStoredResumeRun() {
+    await storageLocalRemove(RESUME_RUN_KEY);
+  }
+
+  async function storeResumeRun(settings, metrics) {
+    return storageLocalSet({
+      [RESUME_RUN_KEY]: {
+        version: 1,
+        pending: true,
+        requestedAt: Date.now(),
+        url: window.location.href,
+        settings: settings || null,
+        metrics: serializableMetrics(metrics)
+      }
+    });
+  }
+
+  function shouldRefreshAfterBatch(metrics, pageMadeWork) {
+    if (metrics.refreshes >= AUTO_REFRESH_PROFILE.maxRefreshes) {
+      metrics.cappedByRefreshLimit = true;
+      return false;
+    }
+
+    if (pageMadeWork) {
+      metrics.refreshesWithoutNewWork = 0;
+      return true;
+    }
+
+    if (metrics.refreshesWithoutNewWork < AUTO_REFRESH_PROFILE.maxNoNewWorkRefreshes) {
+      metrics.refreshesWithoutNewWork += 1;
+      return true;
+    }
+
+    return false;
+  }
+
+  async function requestPageRefresh(metrics, settings, handledCache, pageMadeWork) {
+    if (!shouldRefreshAfterBatch(metrics, pageMadeWork)) {
+      return false;
+    }
+
+    metrics.refreshes += 1;
+    metrics.autoRefreshPending = true;
+    await persistHandledActivityCache(handledCache, metrics);
+    await storeResumeRun(settings, metrics);
+
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 250);
+
+    return true;
+  }
+
   function finalizeRunMetrics(metrics) {
     metrics.stopped = runState.cancelRequested;
     metrics.finishedAt = Date.now();
@@ -968,22 +1291,43 @@
     runState.running = false;
     runState.cancelRequested = false;
     runState.activeMetrics = null;
+    if (!metrics.autoRefreshPending) {
+      clearStoredResumeRun();
+    }
   }
 
-  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange) {
+  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, settings) {
     let idleScrollAttempts = 0;
+    let pageTouchedFeed = false;
+    let pageMadeWork = false;
+    let handledCache = null;
 
     try {
+      handledCache = await loadHandledActivityCache(metrics);
+
       while (!runState.cancelRequested) {
         if (metrics.scanned >= DISCOVERY_PROFILE.maxProcessedButtons) {
           metrics.cappedBySafetyLimit = true;
           break;
         }
 
-        const buttons = getUnprocessedCandidateButtons(processedButtons);
+        const candidateResult = getUnprocessedCandidateButtons(processedButtons, handledCache, metrics);
+        const buttons = candidateResult.buttons;
+        if (candidateResult.sawCandidate || candidateResult.skippedCached > 0) {
+          pageTouchedFeed = true;
+        }
+
         if (buttons.length === 0) {
           if (hasRecentActivityBoundary()) {
             markRecentActivityBoundary(metrics);
+            break;
+          }
+
+          if (pageTouchedFeed) {
+            if (await requestPageRefresh(metrics, settings, handledCache, pageMadeWork)) {
+              break;
+            }
+
             break;
           }
 
@@ -1026,13 +1370,19 @@
         const button = buttons[0];
         processedButtons.add(button);
         metrics.scanned += 1;
+        pageTouchedFeed = true;
 
         if (runState.cancelRequested) {
           break;
         }
 
         try {
-          await processButton(button, metrics, dateRange);
+          const beforeClicked = metrics.clicked;
+          const beforeCachedActivities = metrics.cachedActivitiesAdded;
+          await processButton(button, metrics, dateRange, handledCache);
+          if (metrics.clicked > beforeClicked || metrics.cachedActivitiesAdded > beforeCachedActivities) {
+            pageMadeWork = true;
+          }
         } catch (_error) {
           metrics.errors += 1;
         }
@@ -1049,11 +1399,14 @@
       metrics.errors += 1;
       metrics.errorMessage = error && error.message ? error.message : "Kudos sequence failed.";
     } finally {
+      if (handledCache) {
+        await persistHandledActivityCache(handledCache, metrics);
+      }
       finalizeRunMetrics(metrics);
     }
   }
 
-  function startKudosSequence(settings) {
+  function startKudosSequence(settings, resumeRecord) {
     if (runState.running) {
       return {
         ok: false,
@@ -1079,13 +1432,13 @@
 
     const betweenTargets = normalizeBetweenTargetsRange(settings);
     const dateRange = normalizeDateRange(settings);
-    const metrics = createMetrics(0, betweenTargets, dateRange);
+    const metrics = resumeRecord ? resumeMetrics(resumeRecord, betweenTargets, dateRange) : createMetrics(0, betweenTargets, dateRange);
     const paceState = createPaceState();
     const processedButtons = new WeakSet();
     paceState.betweenTargets = betweenTargets;
     runState.activeMetrics = metrics;
 
-    executeKudosSequence(metrics, paceState, processedButtons, dateRange);
+    executeKudosSequence(metrics, paceState, processedButtons, dateRange, settings);
 
     return {
       ok: true,
@@ -1094,6 +1447,26 @@
       state: statusResult().state,
       metrics
     };
+  }
+
+  async function resumeKudosAfterRefresh() {
+    const record = await storageLocalGet(RESUME_RUN_KEY);
+    if (!resumeRecordIsFresh(record)) {
+      if (record) {
+        await clearStoredResumeRun();
+      }
+      return;
+    }
+
+    if (runState.running || !detectLoginState().loggedIn) {
+      return;
+    }
+
+    if (!(await cancellableDelay(AUTO_REFRESH_PROFILE.resumeSettle))) {
+      return;
+    }
+
+    startKudosSequence(record.settings, record);
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -1118,4 +1491,6 @@
     sendResponse(startKudosSequence(message.settings));
     return false;
   });
+
+  resumeKudosAfterRefresh();
 })();

@@ -43,10 +43,6 @@
     months: 120,
     years: 10
   });
-  const DISCOVERY_PROFILE = Object.freeze({
-    maxIdleScrollAttempts: 4,
-    maxProcessedButtons: 250
-  });
   const BACKGROUND_DISCOVERY_PROFILE = Object.freeze({
     hiddenDiscoveryBackoff: { min: 2500, max: 5500 }
   });
@@ -55,8 +51,6 @@
     flushEvery: 5
   });
   const AUTO_REFRESH_PROFILE = Object.freeze({
-    maxRefreshes: 8,
-    maxNoNewWorkRefreshes: 2,
     resumeTtlMs: 30 * 60 * 1000,
     resumeSettle: { min: 1600, max: 3200 }
   });
@@ -487,9 +481,22 @@
     return Boolean(recentActivityBoundaryText());
   }
 
+  function setCurrentStatus(metrics, key, message) {
+    metrics.currentStatusKey = key;
+    metrics.currentStatus = message;
+  }
+
   function markRecentActivityBoundary(metrics) {
     metrics.endedAtRecentActivityBoundary = true;
     metrics.recentActivityBoundarySeenAt = Date.now();
+    setCurrentStatus(metrics, "runStatusRecentBoundary", "Reached Strava recent-activity boundary.");
+  }
+
+  function markDateRangeBoundary(metrics, dateText) {
+    metrics.endedAtDateBoundary = true;
+    metrics.dateBoundarySeenAt = Date.now();
+    metrics.dateBoundaryText = normalizeDateText(dateText);
+    setCurrentStatus(metrics, "runStatusDateBoundary", "Reached the configured activity-date boundary.");
   }
 
   function feedEntryForButton(button) {
@@ -1142,14 +1149,17 @@
       errors: 0,
       stopped: false,
       stopRequestedAt: null,
+      currentStatusKey: "runStatusStarting",
+      currentStatus: "Starting kudos sequence.",
       discoveryScrolls: 0,
       idleDiscoveryAttempts: 0,
-      cappedBySafetyLimit: false,
       endedAtRecentActivityBoundary: false,
       recentActivityBoundarySeenAt: null,
+      endedAtDateBoundary: false,
+      dateBoundarySeenAt: null,
+      dateBoundaryText: "",
       autoRefreshPending: false,
       refreshes: 0,
-      refreshesWithoutNewWork: 0,
       cappedByRefreshLimit: false,
       resumedAfterRefresh: false,
       resumeCount: 0,
@@ -1172,6 +1182,7 @@
       return false;
     }
 
+    setCurrentStatus(metrics, "runStatusChecking", "Checking a visible kudos button.");
     const activityKey = activityKeyForButton(button);
 
     if (!button.isConnected) {
@@ -1199,7 +1210,8 @@
     const dateFilterStatus = dateFilterStatusForButton(button, dateRange);
     if (dateFilterStatus === "out-of-date") {
       metrics.skippedOutOfDate += 1;
-      return true;
+      markDateRangeBoundary(metrics, activityDateTextFor(button));
+      return "date-boundary";
     }
     if (dateFilterStatus === "unknown") {
       metrics.skippedUnknownDate += 1;
@@ -1210,6 +1222,7 @@
       return false;
     }
 
+    setCurrentStatus(metrics, "runStatusRechecking", "Re-checking the kudos button before clicking.");
     if (!button.isConnected) {
       metrics.skippedMissing += 1;
       return true;
@@ -1235,7 +1248,8 @@
     const settledDateFilterStatus = dateFilterStatusForButton(button, dateRange);
     if (settledDateFilterStatus === "out-of-date") {
       metrics.skippedOutOfDate += 1;
-      return true;
+      markDateRangeBoundary(metrics, activityDateTextFor(button));
+      return "date-boundary";
     }
     if (settledDateFilterStatus === "unknown") {
       metrics.skippedUnknownDate += 1;
@@ -1247,6 +1261,7 @@
     }
 
     metrics.clicked += 1;
+    setCurrentStatus(metrics, "runStatusClicked", "Clicked a kudos button.");
     await markActivityHandled(handledCache, activityKey, metrics);
     return true;
   }
@@ -1285,15 +1300,6 @@
     };
   }
 
-  function serializableMetrics(metrics) {
-    return {
-      ...metrics,
-      autoRefreshPending: false,
-      finishedAt: null,
-      durationMs: null
-    };
-  }
-
   function resumeRecordIsFresh(record) {
     const requestedAt = Number(record && record.requestedAt);
     return Boolean(record && record.pending) &&
@@ -1315,61 +1321,13 @@
     restored.resumeCount = Number(restored.resumeCount || 0) + 1;
     restored.finishedAt = null;
     restored.durationMs = null;
+    setCurrentStatus(restored, "runStatusResumed", "Resumed after refreshing Strava.");
 
     return restored;
   }
 
   async function clearStoredResumeRun() {
     await storageLocalRemove(RESUME_RUN_KEY);
-  }
-
-  async function storeResumeRun(settings, metrics) {
-    return storageLocalSet({
-      [RESUME_RUN_KEY]: {
-        version: 1,
-        pending: true,
-        requestedAt: Date.now(),
-        url: window.location.href,
-        settings: settings || null,
-        metrics: serializableMetrics(metrics)
-      }
-    });
-  }
-
-  function shouldRefreshAfterBatch(metrics, pageMadeWork) {
-    if (metrics.refreshes >= AUTO_REFRESH_PROFILE.maxRefreshes) {
-      metrics.cappedByRefreshLimit = true;
-      return false;
-    }
-
-    if (pageMadeWork) {
-      metrics.refreshesWithoutNewWork = 0;
-      return true;
-    }
-
-    if (metrics.refreshesWithoutNewWork < AUTO_REFRESH_PROFILE.maxNoNewWorkRefreshes) {
-      metrics.refreshesWithoutNewWork += 1;
-      return true;
-    }
-
-    return false;
-  }
-
-  async function requestPageRefresh(metrics, settings, handledCache, pageMadeWork) {
-    if (!shouldRefreshAfterBatch(metrics, pageMadeWork)) {
-      return false;
-    }
-
-    metrics.refreshes += 1;
-    metrics.autoRefreshPending = true;
-    await persistHandledActivityCache(handledCache, metrics);
-    await storeResumeRun(settings, metrics);
-
-    window.setTimeout(() => {
-      window.location.reload();
-    }, 250);
-
-    return true;
   }
 
   function finalizeRunMetrics(metrics) {
@@ -1385,21 +1343,15 @@
     }
   }
 
-  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter, settings) {
+  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter) {
     let idleScrollAttempts = 0;
     let pageTouchedFeed = false;
-    let pageMadeWork = false;
     let handledCache = null;
 
     try {
       handledCache = await loadHandledActivityCache(metrics);
 
       while (!runState.cancelRequested) {
-        if (metrics.scanned >= DISCOVERY_PROFILE.maxProcessedButtons) {
-          metrics.cappedBySafetyLimit = true;
-          break;
-        }
-
         const candidateResult = getUnprocessedCandidateButtons(processedButtons, handledCache, metrics);
         const buttons = candidateResult.buttons;
         if (candidateResult.sawCandidate || candidateResult.skippedCached > 0) {
@@ -1413,17 +1365,10 @@
           }
 
           if (pageTouchedFeed) {
-            if (await requestPageRefresh(metrics, settings, handledCache, pageMadeWork)) {
-              break;
-            }
-
-            break;
+            setCurrentStatus(metrics, "runStatusBatchComplete", "Loaded batch is complete; scrolling for more activities.");
           }
 
-          if (idleScrollAttempts >= DISCOVERY_PROFILE.maxIdleScrollAttempts) {
-            break;
-          }
-
+          setCurrentStatus(metrics, "runStatusScrolling", "Scrolling the dashboard to let Strava load more activities.");
           metrics.discoveryScrolls += 1;
           const madeProgress = await scrollForMoreFeedItems();
           if (runState.cancelRequested) {
@@ -1438,10 +1383,12 @@
           if (madeProgress) {
             idleScrollAttempts = 0;
             metrics.idleDiscoveryAttempts = 0;
+            setCurrentStatus(metrics, "runStatusMoreLoaded", "More feed content loaded; scanning again.");
             continue;
           }
 
           if (isPageHidden()) {
+            setCurrentStatus(metrics, "runStatusHiddenWaiting", "Strava tab is hidden; waiting before the next discovery scroll.");
             if (!(await hiddenDiscoveryBackoff(metrics))) {
               break;
             }
@@ -1450,6 +1397,10 @@
 
           idleScrollAttempts += 1;
           metrics.idleDiscoveryAttempts = idleScrollAttempts;
+          setCurrentStatus(metrics, "runStatusWaiting", "Waiting briefly for Strava to fetch more activities.");
+          if (!(await cancellableDelay(TIMING_PROFILE.feedLoadSettle))) {
+            break;
+          }
           continue;
         }
 
@@ -1466,11 +1417,9 @@
         }
 
         try {
-          const beforeClicked = metrics.clicked;
-          const beforeCachedActivities = metrics.cachedActivitiesAdded;
-          await processButton(button, metrics, dateRange, handledCache, relationshipFilter);
-          if (metrics.clicked > beforeClicked || metrics.cachedActivitiesAdded > beforeCachedActivities) {
-            pageMadeWork = true;
+          const processResult = await processButton(button, metrics, dateRange, handledCache, relationshipFilter);
+          if (processResult === "date-boundary") {
+            break;
           }
         } catch (_error) {
           metrics.errors += 1;
@@ -1529,7 +1478,7 @@
     metrics.relationshipFilter = relationshipFilter;
     runState.activeMetrics = metrics;
 
-    executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter, settings);
+    executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter);
 
     return {
       ok: true,

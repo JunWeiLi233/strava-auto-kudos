@@ -68,6 +68,7 @@
       startedStatus: "Kudos started. You can use other windows while the Strava tab stays open.",
       stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
       clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
+      runningProgressStatus: "{status} Clicked {clicked}; scanned {scanned}; skipped {skipped}; scrolls {scrolls}; waits {waits}; refreshes {refreshes}.",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "button",
@@ -88,7 +89,20 @@
       noRunningStatus: "No kudos sequence is running.",
       openStravaStatus: "Open Strava to run kudos.",
       alreadyRunningStatus: "Kudos sequence is already running.",
-      recentActivityBoundaryStatus: "Reached Strava's no-more-recent-activities boundary; stopped."
+      recentActivityBoundaryStatus: "Reached Strava's no-more-recent-activities boundary; stopped.",
+      dateBoundaryStatus: "Reached the selected Activity date boundary; stopped.",
+      runStatusStarting: "Starting kudos sequence.",
+      runStatusRecentBoundary: "Reached Strava recent-activity boundary.",
+      runStatusDateBoundary: "Reached the configured activity-date boundary.",
+      runStatusChecking: "Checking a visible kudos button.",
+      runStatusRechecking: "Re-checking the kudos button before clicking.",
+      runStatusClicked: "Clicked a kudos button.",
+      runStatusResumed: "Resumed after refreshing Strava.",
+      runStatusBatchComplete: "Loaded batch is complete; scrolling for more activities.",
+      runStatusScrolling: "Scrolling the dashboard to let Strava load more activities.",
+      runStatusMoreLoaded: "More feed content loaded; scanning again.",
+      runStatusHiddenWaiting: "Strava tab is hidden; waiting before the next discovery scroll.",
+      runStatusWaiting: "Waiting briefly for Strava to fetch more activities."
     },
     zh: {
       title: "Strava Kudos",
@@ -126,6 +140,7 @@
       startedStatus: "Kudos 已开始。保持 Strava 标签页打开后，你可以使用其他窗口。",
       stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
       clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
+      runningProgressStatus: "{status} 已点击 {clicked} 次；扫描 {scanned} 个；跳过 {skipped} 个；滚动 {scrolls} 次；等待 {waits} 次；刷新 {refreshes} 次。",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "按钮",
@@ -146,7 +161,20 @@
       noRunningStatus: "当前没有正在运行的 kudos 流程。",
       openStravaStatus: "请打开 Strava 后再运行 kudos。",
       alreadyRunningStatus: "Kudos 流程已经在运行。",
-      recentActivityBoundaryStatus: "已到达 Strava“没有更多近期活动”提示，流程已停止。"
+      recentActivityBoundaryStatus: "已到达 Strava“没有更多近期活动”提示，流程已停止。",
+      dateBoundaryStatus: "已到达选择的动态日期边界，流程已停止。",
+      runStatusStarting: "正在启动 kudos 流程。",
+      runStatusRecentBoundary: "已到达 Strava 近期动态边界。",
+      runStatusDateBoundary: "已到达设置的动态日期边界。",
+      runStatusChecking: "正在检查可见的 kudos 按钮。",
+      runStatusRechecking: "点击前正在重新检查 kudos 按钮。",
+      runStatusClicked: "已点击一个 kudos 按钮。",
+      runStatusResumed: "刷新 Strava 后已恢复。",
+      runStatusBatchComplete: "当前批次已完成，正在滚动查找更多动态。",
+      runStatusScrolling: "正在滚动仪表盘，等待 Strava 加载更多动态。",
+      runStatusMoreLoaded: "已加载更多动态，正在继续扫描。",
+      runStatusHiddenWaiting: "Strava 标签页在后台，正在等待下次滚动。",
+      runStatusWaiting: "正在短暂等待 Strava 获取更多动态。"
     }
   });
 
@@ -541,6 +569,10 @@
       return { key: "recentActivityBoundaryStatus" };
     }
 
+    if (metrics.endedAtDateBoundary) {
+      return { key: "dateBoundaryStatus" };
+    }
+
     const knownKey = knownMessageKey(response.message);
     if (knownKey) {
       return { key: knownKey };
@@ -564,10 +596,27 @@
     };
   }
 
+  function runningStatusDescriptor(metrics) {
+    const safeMetrics = metrics || {};
+    return {
+      key: "runningProgressStatus",
+      params: {
+        status: safeMetrics.currentStatusKey ? t(safeMetrics.currentStatusKey) : (safeMetrics.currentStatus || t("backgroundStatus")),
+        clicked: Number(safeMetrics.clicked || 0),
+        scanned: Number(safeMetrics.scanned || 0),
+        skipped: skippedCount(safeMetrics),
+        scrolls: Number(safeMetrics.discoveryScrolls || 0),
+        waits: Number(safeMetrics.idleDiscoveryAttempts || 0) + Number(safeMetrics.hiddenDiscoveryBackoffs || 0),
+        refreshes: Number(safeMetrics.refreshes || 0)
+      }
+    };
+  }
+
   function applyStatusResponse(response, quiet) {
     const state = response && response.state ? response.state : {};
     const isRunning = Boolean(state.running);
     const stopPending = Boolean(state.cancelRequested);
+    const metrics = state.metrics || {};
     setRunningControls(isRunning, stopPending);
 
     if (isRunning && stopPending) {
@@ -576,7 +625,7 @@
     }
 
     if (isRunning) {
-      setStatusKey("backgroundStatus", "busy");
+      setStatusDescriptor(runningStatusDescriptor(metrics), "busy");
       return;
     }
 

@@ -28,26 +28,67 @@ Strava Auto Kudos 是一个轻量级 Chrome 扩展，适合不想每天手动给
 
 ### 安装方法
 
-1. 克隆或下载仓库：
+推荐直接下载 Release 里的 ZIP 包：
 
-   ```bash
-   git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
-   ```
+```text
+https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
+```
 
-2. 打开 Chrome，进入：
+下载类似下面名字的文件：
+
+```text
+strava-auto-kudos-v1.0.0.zip
+```
+
+解压后，在 Chrome 的 `chrome://extensions` 页面打开 **Developer mode**，点击 **Load unpacked**，选择解压后的 `strava-auto-kudos` 文件夹。
+
+也可以用 Git 克隆仓库：
+
+```bash
+git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
+```
+
+然后：
+
+1. 打开 Chrome，进入：
 
    ```text
    chrome://extensions
    ```
 
-3. 打开右上角的 **Developer mode**。
-4. 点击 **Load unpacked**。
-5. 选择 `strava-auto-kudos` 文件夹。
-6. 打开或刷新 Strava：
+2. 打开右上角的 **Developer mode**。
+3. 点击 **Load unpacked**。
+4. 选择 `strava-auto-kudos` 文件夹。
+5. 打开或刷新 Strava：
 
    ```text
    https://www.strava.com/
    ```
+
+### 更新方法
+
+Chrome 不会自动更新 unpacked extension。手动更新方法：
+
+1. 从最新 Release 下载 ZIP：
+
+   ```text
+   https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
+   ```
+
+2. 解压新版本。
+3. 用新文件夹替换旧的 `strava-auto-kudos` 文件夹，或者解压到原来的固定位置。
+4. 打开 `chrome://extensions`。
+5. 找到 **Strava Auto Kudos**。
+6. 点击扩展卡片上的 reload 图标。
+7. 刷新已经打开的 Strava 页面。
+
+如果你是用 Git 克隆安装的，可以在项目目录运行：
+
+```bash
+git pull
+```
+
+然后在 `chrome://extensions` 里重新加载扩展。
 
 ### 使用方法
 
@@ -110,7 +151,43 @@ The extension does not request broad browsing access. It is scoped to `https://w
 
 ## Install From Source
 
-1. Download or clone this repository.
+### Option 1: Download The Release Package
+
+1. Go to the latest release:
+
+   ```text
+   https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
+   ```
+
+2. Download the package named like:
+
+   ```text
+   strava-auto-kudos-v1.0.0.zip
+   ```
+
+3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
+
+4. Open Chrome and go to:
+
+   ```text
+   chrome://extensions
+   ```
+
+5. Enable **Developer mode**.
+
+6. Click **Load unpacked**.
+
+7. Select the unzipped `strava-auto-kudos` folder.
+
+8. Open or refresh Strava:
+
+   ```text
+   https://www.strava.com/
+   ```
+
+### Option 2: Clone The Repository
+
+1. Clone this repository.
 
    ```bash
    git clone https://github.com/JunWeiLi233/strava-auto-kudos.git
@@ -141,6 +218,36 @@ The extension does not request broad browsing access. It is scoped to `https://w
    ```
 
 8. Click the Chrome extensions puzzle icon and pin **Strava Auto Kudos** if you want it visible in the toolbar.
+
+## Updating The Extension
+
+Chrome does not automatically update unpacked extensions. To update manually:
+
+1. Download the newest ZIP from:
+
+   ```text
+   https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
+   ```
+
+2. Unzip it.
+3. Replace your old `strava-auto-kudos` folder with the new unzipped folder, or unzip the new package into the same permanent location.
+4. Open:
+
+   ```text
+   chrome://extensions
+   ```
+
+5. Find **Strava Auto Kudos**.
+6. Click the reload icon on the extension card.
+7. Refresh any open Strava tabs.
+
+If you installed by cloning the repository, you can update with:
+
+```bash
+git pull
+```
+
+Then reload the extension from `chrome://extensions`.
 
 ## Usage
 

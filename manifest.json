@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Strava Auto Kudos",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Clicks unselected Strava kudos buttons from the active dashboard feed.",
   "homepage_url": "https://github.com/JunWeiLi233/strava-auto-kudos",
   "permissions": [

@@ -342,6 +342,90 @@
     return String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
   }
 
+  function textMatchesRecentActivityBoundary(text) {
+    const normalized = normalizeDateText(text);
+    if (!normalized) {
+      return false;
+    }
+
+    const lower = normalized.toLowerCase();
+    const hasChineseTitle =
+      /\u6ca1\u6709\u66f4\u591a\u8fd1\u671f\u6d3b\u52a8/.test(normalized) ||
+      /\u6c92\u6709\u66f4\u591a\u8fd1\u671f\u6d3b\u52d5/.test(normalized);
+    const hasChineseHistory =
+      /\u5b8c\u6574\u6d3b\u52a8\u5386\u53f2/.test(normalized) ||
+      /\u5b8c\u6574\u6d3b\u52d5\u6b77\u53f2/.test(normalized);
+    const hasChineseDestination =
+      /\u4e2a\u4eba\u8d44\u6599/.test(normalized) ||
+      /\u500b\u4eba\u8cc7\u6599/.test(normalized) ||
+      /\u8bad\u7ec3\u65e5\u5386/.test(normalized) ||
+      /\u8a13\u7df4\u65e5\u66c6/.test(normalized);
+    const hasChineseBoundary =
+      hasChineseTitle ||
+      (hasChineseHistory && hasChineseDestination);
+    const hasEnglishBoundary =
+      /no more recent activities/.test(lower) ||
+      (/full activity history/.test(lower) && (/profile/.test(lower) || /training calendar/.test(lower)));
+
+    return hasChineseBoundary || hasEnglishBoundary;
+  }
+
+  function elementIsVisibleInViewport(element) {
+    if (!element || !(element instanceof Element)) {
+      return false;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+
+    return rect.width > 0 &&
+      rect.height > 0 &&
+      rect.bottom >= 0 &&
+      rect.right >= 0 &&
+      rect.top <= viewportHeight &&
+      rect.left <= viewportWidth;
+  }
+
+  function directTextFor(element) {
+    return Array.from(element.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join(" ");
+  }
+
+  function recentActivityBoundaryText() {
+    const root = document.querySelector("main") || document.body;
+    if (!root) {
+      return "";
+    }
+
+    const candidates = Array.from(root.querySelectorAll("p, span, div, h1, h2, h3, li"));
+    for (const element of candidates) {
+      if (!elementIsVisibleInViewport(element)) {
+        continue;
+      }
+
+      const directText = directTextFor(element);
+      const rect = element.getBoundingClientRect();
+      const candidateText = directText || (rect.height <= (window.innerHeight || 800) * 1.5 ? element.textContent : "");
+      if (textMatchesRecentActivityBoundary(candidateText)) {
+        return normalizeDateText(candidateText);
+      }
+    }
+
+    return "";
+  }
+
+  function hasRecentActivityBoundary() {
+    return Boolean(recentActivityBoundaryText());
+  }
+
+  function markRecentActivityBoundary(metrics) {
+    metrics.endedAtRecentActivityBoundary = true;
+    metrics.recentActivityBoundarySeenAt = Date.now();
+  }
+
   function applyTimeFromText(date, text) {
     const normalized = normalizeDateText(text);
     const amPmMatch = /(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?/i.exec(normalized);
@@ -763,6 +847,8 @@
       discoveryScrolls: 0,
       idleDiscoveryAttempts: 0,
       cappedBySafetyLimit: false,
+      endedAtRecentActivityBoundary: false,
+      recentActivityBoundarySeenAt: null,
       hiddenDiscoveryBackoffs: 0,
       hiddenSince: null,
       delayRangeMs: betweenTargets,
@@ -896,6 +982,11 @@
 
         const buttons = getUnprocessedCandidateButtons(processedButtons);
         if (buttons.length === 0) {
+          if (hasRecentActivityBoundary()) {
+            markRecentActivityBoundary(metrics);
+            break;
+          }
+
           if (idleScrollAttempts >= DISCOVERY_PROFILE.maxIdleScrollAttempts) {
             break;
           }
@@ -903,6 +994,11 @@
           metrics.discoveryScrolls += 1;
           const madeProgress = await scrollForMoreFeedItems();
           if (runState.cancelRequested) {
+            break;
+          }
+
+          if (hasRecentActivityBoundary()) {
+            markRecentActivityBoundary(metrics);
             break;
           }
 

@@ -77,7 +77,8 @@
       invalidDate: "Invalid date filter.",
       noRunningStatus: "No kudos sequence is running.",
       openStravaStatus: "Open Strava to run kudos.",
-      alreadyRunningStatus: "Kudos sequence is already running."
+      alreadyRunningStatus: "Kudos sequence is already running.",
+      recentActivityBoundaryStatus: "Reached Strava's no-more-recent-activities boundary; stopped."
     },
     zh: {
       title: "Strava Kudos",
@@ -128,7 +129,8 @@
       invalidDate: "日期过滤无效。",
       noRunningStatus: "当前没有正在运行的 kudos 流程。",
       openStravaStatus: "请打开 Strava 后再运行 kudos。",
-      alreadyRunningStatus: "Kudos 流程已经在运行。"
+      alreadyRunningStatus: "Kudos 流程已经在运行。",
+      recentActivityBoundaryStatus: "已到达 Strava“没有更多近期活动”提示，流程已停止。"
     }
   });
 
@@ -479,6 +481,10 @@
           skipped
         }
       };
+    }
+
+    if (metrics.endedAtRecentActivityBoundary) {
+      return { key: "recentActivityBoundaryStatus" };
     }
 
     const knownKey = knownMessageKey(response.message);

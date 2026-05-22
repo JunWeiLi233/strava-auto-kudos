@@ -858,37 +858,18 @@
     };
   }
 
-  async function runKudosSequence(settings) {
-    if (runState.running) {
-      return {
-        ok: false,
-        message: "Kudos sequence is already running.",
-        metrics: null
-      };
-    }
-
-    runState.running = true;
+  function finalizeRunMetrics(metrics) {
+    metrics.stopped = runState.cancelRequested;
+    metrics.finishedAt = Date.now();
+    metrics.durationMs = metrics.finishedAt - metrics.startedAt;
+    runState.lastMetrics = metrics;
+    runState.running = false;
     runState.cancelRequested = false;
+    runState.activeMetrics = null;
+  }
 
-    const login = detectLoginState();
-    if (!login.loggedIn) {
-      runState.running = false;
-      return {
-        ok: false,
-        message: "Please log in to Strava before using this extension.",
-        login,
-        metrics: null
-      };
-    }
-
-    const betweenTargets = normalizeBetweenTargetsRange(settings);
-    const dateRange = normalizeDateRange(settings);
-    const metrics = createMetrics(0, betweenTargets, dateRange);
-    const paceState = createPaceState();
-    const processedButtons = new WeakSet();
+  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange) {
     let idleScrollAttempts = 0;
-    paceState.betweenTargets = betweenTargets;
-    runState.activeMetrics = metrics;
 
     try {
       while (!runState.cancelRequested) {
@@ -938,22 +919,55 @@
           break;
         }
       }
-
-      metrics.stopped = runState.cancelRequested;
-      metrics.finishedAt = Date.now();
-      metrics.durationMs = metrics.finishedAt - metrics.startedAt;
-      runState.lastMetrics = metrics;
-
-      return {
-        ok: true,
-        message: metrics.stopped ? "Kudos sequence stopped." : "Kudos sequence completed.",
-        metrics
-      };
+    } catch (error) {
+      metrics.errors += 1;
+      metrics.errorMessage = error && error.message ? error.message : "Kudos sequence failed.";
     } finally {
-      runState.running = false;
-      runState.cancelRequested = false;
-      runState.activeMetrics = null;
+      finalizeRunMetrics(metrics);
     }
+  }
+
+  function startKudosSequence(settings) {
+    if (runState.running) {
+      return {
+        ok: false,
+        message: "Kudos sequence is already running.",
+        state: statusResult().state,
+        metrics: runState.activeMetrics
+      };
+    }
+
+    runState.running = true;
+    runState.cancelRequested = false;
+
+    const login = detectLoginState();
+    if (!login.loggedIn) {
+      runState.running = false;
+      return {
+        ok: false,
+        message: "Please log in to Strava before using this extension.",
+        login,
+        metrics: null
+      };
+    }
+
+    const betweenTargets = normalizeBetweenTargetsRange(settings);
+    const dateRange = normalizeDateRange(settings);
+    const metrics = createMetrics(0, betweenTargets, dateRange);
+    const paceState = createPaceState();
+    const processedButtons = new WeakSet();
+    paceState.betweenTargets = betweenTargets;
+    runState.activeMetrics = metrics;
+
+    executeKudosSequence(metrics, paceState, processedButtons, dateRange);
+
+    return {
+      ok: true,
+      started: true,
+      message: "Kudos sequence started.",
+      state: statusResult().state,
+      metrics
+    };
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -975,18 +989,7 @@
       return false;
     }
 
-    runKudosSequence(message.settings)
-      .then((result) => {
-        sendResponse(result);
-      })
-      .catch((error) => {
-        sendResponse({
-          ok: false,
-          message: error && error.message ? error.message : "Kudos sequence failed.",
-          metrics: null
-        });
-      });
-
-    return true;
+    sendResponse(startKudosSequence(message.settings));
+    return false;
   });
 })();

@@ -4,9 +4,6 @@
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
-  const STRAVA_HOST = "www.strava.com";
-  const STRAVA_DASHBOARD_URL = "https://www.strava.com/dashboard";
-  const MISSING_RECEIVER_PATTERN = /Could not establish connection|Receiving end does not exist/i;
   const SETTINGS_STORAGE_KEY = "stravaAutoKudosSettings";
   const DEFAULT_DELAY_RANGE_SECONDS = Object.freeze({
     min: 1.7,
@@ -44,17 +41,8 @@
   }
 
   function setRunningControls(isRunning, stopPending) {
-    runButton.disabled = isRunning;
+    runButton.disabled = Boolean(isRunning);
     stopButton.disabled = !isRunning || Boolean(stopPending);
-  }
-
-  function isSupportedStravaUrl(url) {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === "https:" && parsed.hostname === STRAVA_HOST;
-    } catch (_error) {
-      return false;
-    }
   }
 
   function parseSeconds(value) {
@@ -94,18 +82,14 @@
   }
 
   function loadDelaySettings() {
-    try {
-      const parsed = loadStoredSettings();
-      const min = parseSeconds(parsed.minDelaySeconds);
-      const max = parseSeconds(parsed.maxDelaySeconds);
-      if (min === null || max === null) {
-        return { ...DEFAULT_DELAY_RANGE_SECONDS };
-      }
-
-      return { min, max };
-    } catch (_error) {
+    const parsed = loadStoredSettings();
+    const min = parseSeconds(parsed.minDelaySeconds);
+    const max = parseSeconds(parsed.maxDelaySeconds);
+    if (min === null || max === null) {
       return { ...DEFAULT_DELAY_RANGE_SECONDS };
     }
+
+    return { min, max };
   }
 
   function saveDelaySettings(range) {
@@ -228,87 +212,7 @@
     };
   }
 
-  function queryActiveTab() {
-    return new Promise((resolve, reject) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-
-        resolve(tabs[0] || null);
-      });
-    });
-  }
-
-  function createTab(url) {
-    return new Promise((resolve, reject) => {
-      chrome.tabs.create({ active: true, url }, (tab) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-
-        resolve(tab);
-      });
-    });
-  }
-
-  function updateTab(tabId, url) {
-    return new Promise((resolve, reject) => {
-      chrome.tabs.update(tabId, { active: true, url }, (tab) => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-
-        resolve(tab);
-      });
-    });
-  }
-
-  function waitForTabComplete(tabId) {
-    return new Promise((resolve) => {
-      const timeoutId = window.setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }, 12000);
-
-      function listener(updatedTabId, changeInfo) {
-        if (updatedTabId !== tabId || changeInfo.status !== "complete") {
-          return;
-        }
-
-        window.clearTimeout(timeoutId);
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve();
-      }
-
-      chrome.tabs.onUpdated.addListener(listener);
-    });
-  }
-
-  function executeContentScript(tabId) {
-    return new Promise((resolve, reject) => {
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ["content.js"]
-      }, () => {
-        const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-
-        resolve();
-      });
-    });
-  }
-
-  function sendActionMessage(tabId, action, settings) {
+  function sendRuntimeAction(action, settings) {
     const payload = {
       action,
       source: "strava-auto-kudos-popup",
@@ -317,7 +221,7 @@
     };
 
     return new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tabId, payload, (response) => {
+      chrome.runtime.sendMessage(payload, (response) => {
         const error = chrome.runtime.lastError;
         if (error) {
           reject(new Error(error.message));
@@ -329,88 +233,69 @@
     });
   }
 
-  async function ensureStravaTab() {
-    const tab = await queryActiveTab();
-    if (!tab || typeof tab.id !== "number") {
-      setStatus("Opening Strava...", "busy");
-      const createdTab = await createTab(STRAVA_DASHBOARD_URL);
-      await waitForTabComplete(createdTab.id);
-      return createdTab;
-    }
-
-    if (!isSupportedStravaUrl(tab.url)) {
-      setStatus("Opening Strava...", "busy");
-      const updatedTab = await updateTab(tab.id, STRAVA_DASHBOARD_URL);
-      await waitForTabComplete(tab.id);
-      return updatedTab || { id: tab.id, url: STRAVA_DASHBOARD_URL };
-    }
-
-    return tab;
-  }
-
-  async function sendActionWithInjectedContent(tabId, action, settings) {
-    try {
-      return await sendActionMessage(tabId, action, settings);
-    } catch (error) {
-      if (!MISSING_RECEIVER_PATTERN.test(error.message || "")) {
-        throw error;
-      }
-
-      await executeContentScript(tabId);
-      return sendActionMessage(tabId, action, settings);
-    }
-  }
-
   function isLoggedOutResponse(response) {
     const login = response && (response.login || (response.state && response.state.login));
     return login && login.loggedIn === false;
   }
 
-  function formatResult(response) {
-    if (!response || !response.ok) {
-      return "No kudos run confirmation received.";
-    }
-
-    const metrics = response.metrics || {};
-    const clicked = Number(metrics.clicked || 0);
-    const scanned = Number(metrics.scanned || 0);
-    const skipped = Number(metrics.skippedAlreadyClicked || 0) +
+  function skippedCount(metrics) {
+    return Number(metrics.skippedAlreadyClicked || 0) +
       Number(metrics.skippedDisabled || 0) +
       Number(metrics.skippedMissing || 0) +
       Number(metrics.skippedOutOfDate || 0) +
       Number(metrics.skippedUnknownDate || 0);
+  }
+
+  function formatResult(response) {
+    if (!response || !response.ok) {
+      return response && response.message ? response.message : "No kudos run confirmation received.";
+    }
+
+    if (response.started) {
+      return "Kudos started. You can use other windows while the Strava tab stays open.";
+    }
+
+    const metrics = response.metrics || (response.state && response.state.metrics) || {};
+    const clicked = Number(metrics.clicked || 0);
+    const scanned = Number(metrics.scanned || 0);
+    const skipped = skippedCount(metrics);
 
     if (metrics.stopped) {
       return `Stopped after ${clicked} click${clicked === 1 ? "" : "s"}; scanned ${scanned}, skipped ${skipped}.`;
     }
 
+    if (response.message) {
+      return response.message;
+    }
+
     return `Clicked ${clicked} of ${scanned} button${scanned === 1 ? "" : "s"}; skipped ${skipped}.`;
   }
 
-  function applyStatusResponse(response) {
+  function applyStatusResponse(response, quiet) {
     const state = response && response.state ? response.state : {};
-    setRunningControls(Boolean(state.running), Boolean(state.cancelRequested));
+    const isRunning = Boolean(state.running);
+    const stopPending = Boolean(state.cancelRequested);
+    setRunningControls(isRunning, stopPending);
 
-    if (state.running && state.cancelRequested) {
+    if (isRunning && stopPending) {
       setStatus("Stopping after the current movement...", "busy");
       return;
     }
 
-    if (state.running) {
-      setStatus("Kudos sequence is running...", "busy");
+    if (isRunning) {
+      setStatus("Kudos sequence is running in the Strava tab.", "busy");
+      return;
+    }
+
+    if (!quiet) {
+      setStatus(formatResult(response), response && response.ok ? "ready" : "error");
     }
   }
 
   async function refreshStatus() {
     try {
-      const tab = await queryActiveTab();
-      if (!tab || typeof tab.id !== "number" || !isSupportedStravaUrl(tab.url)) {
-        setRunningControls(false, false);
-        return;
-      }
-
-      const response = await sendActionWithInjectedContent(tab.id, ACTION_STATUS_KUDOS);
-      applyStatusResponse(response);
+      const response = await sendRuntimeAction(ACTION_STATUS_KUDOS);
+      applyStatusResponse(response, true);
     } catch (_error) {
       setRunningControls(false, false);
     }
@@ -418,29 +303,23 @@
 
   async function run() {
     setRunningControls(true, false);
-    setStatus("Checking active tab...", "busy");
+    setStatus("Starting Strava kudos...", "busy");
 
     try {
       const runSettings = buildRunSettings();
-      const tab = await ensureStravaTab();
-      setStatus("Checking Strava login...", "busy");
-      const statusResponse = await sendActionWithInjectedContent(tab.id, ACTION_STATUS_KUDOS);
-      if (isLoggedOutResponse(statusResponse)) {
+      const response = await sendRuntimeAction(ACTION_RUN_KUDOS, runSettings);
+      if (isLoggedOutResponse(response)) {
+        setRunningControls(false, false);
         setStatus("Please log in to Strava, then run this extension again.", "error");
         return;
       }
 
-      setStatus("Running kudos sequence...", "busy");
-      const response = await sendActionWithInjectedContent(tab.id, ACTION_RUN_KUDOS, runSettings);
-      if (isLoggedOutResponse(response)) {
-        setStatus("Please log in to Strava, then run this extension again.", "error");
-        return;
-      }
-      setStatus(formatResult(response), response && response.ok ? "ready" : "error");
+      applyStatusResponse(response, true);
+      const state = response && response.state ? response.state : {};
+      setStatus(formatResult(response), response && (response.ok || state.running) ? "busy" : "error");
     } catch (error) {
-      setStatus(error.message || "Unable to run kudos sequence.", "error");
-    } finally {
       setRunningControls(false, false);
+      setStatus(error.message || "Unable to start kudos sequence.", "error");
     }
   }
 
@@ -449,12 +328,11 @@
     setStatus("Sending stop request...", "busy");
 
     try {
-      const tab = await ensureStravaTab();
-      const response = await sendActionWithInjectedContent(tab.id, ACTION_STOP_KUDOS);
+      const response = await sendRuntimeAction(ACTION_STOP_KUDOS);
       if (response && response.ok) {
-        setStatus(response.message || "Stop requested.", "busy");
+        applyStatusResponse(response, false);
       } else {
-        setStatus("No running kudos sequence found.", "ready");
+        setStatus(formatResult(response), "ready");
         setRunningControls(false, false);
       }
     } catch (error) {
@@ -463,25 +341,16 @@
     }
   }
 
-  runButton.addEventListener("click", run);
-  stopButton.addEventListener("click", stop);
-  minDelayInput.addEventListener("change", () => {
+  function saveDelayFromInputs() {
     try {
       readDelaySettings();
       setStatus("Delay range saved.", "ready");
     } catch (error) {
       setStatus(error.message || "Invalid delay range.", "error");
     }
-  });
-  maxDelayInput.addEventListener("change", () => {
-    try {
-      readDelaySettings();
-      setStatus("Delay range saved.", "ready");
-    } catch (error) {
-      setStatus(error.message || "Invalid delay range.", "error");
-    }
-  });
-  dateRangeMode.addEventListener("change", () => {
+  }
+
+  function saveDateRangeFromInputs() {
     try {
       setDateRangeControlsEnabled();
       readDateRangeSettings();
@@ -489,23 +358,15 @@
     } catch (error) {
       setStatus(error.message || "Invalid date filter.", "error");
     }
-  });
-  dateRangeValue.addEventListener("change", () => {
-    try {
-      readDateRangeSettings();
-      setStatus("Date filter saved.", "ready");
-    } catch (error) {
-      setStatus(error.message || "Invalid date filter.", "error");
-    }
-  });
-  dateRangeUnit.addEventListener("change", () => {
-    try {
-      readDateRangeSettings();
-      setStatus("Date filter saved.", "ready");
-    } catch (error) {
-      setStatus(error.message || "Invalid date filter.", "error");
-    }
-  });
+  }
+
+  runButton.addEventListener("click", run);
+  stopButton.addEventListener("click", stop);
+  minDelayInput.addEventListener("change", saveDelayFromInputs);
+  maxDelayInput.addEventListener("change", saveDelayFromInputs);
+  dateRangeMode.addEventListener("change", saveDateRangeFromInputs);
+  dateRangeValue.addEventListener("change", saveDateRangeFromInputs);
+  dateRangeUnit.addEventListener("change", saveDateRangeFromInputs);
   applyDelaySettingsToInputs();
   applyDateRangeSettingsToInputs();
   refreshStatus();

@@ -2,7 +2,7 @@
 
 A small Chrome Extension for runners who want to spend less time manually clicking kudos on the Strava feed.
 
-The extension runs only when you press its popup button. If the current tab is not on Strava, it opens the Strava dashboard first. It then checks whether Strava appears logged in, scans for kudos buttons that have not already been selected, scrolls each target into view, waits with randomized human-paced timing, and triggers the native button click.
+The extension runs only when you press its popup button. If the current tab is not on Strava, it opens the Strava dashboard first. It then checks whether Strava appears logged in, starts the kudos sequence in the Strava tab, scans for kudos buttons that have not already been selected, scrolls each target into view, waits with randomized human-paced timing, and triggers the native button click. After the run starts, the popup can close and you can use other Chrome windows while the Strava tab remains open.
 
 Repository: <https://github.com/JunWeiLi233/strava-auto-kudos>
 
@@ -39,7 +39,7 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 下载类似下面名字的文件：
 
    ```text
-   strava-auto-kudos-v1.0.6.zip
+   strava-auto-kudos-v1.0.7.zip
    ```
 
 解压后，请确认你选择的文件夹里面能直接看到 `manifest.json`。
@@ -47,8 +47,9 @@ https://github.com/JunWeiLi233/strava-auto-kudos/releases/latest
 正确结构应该是：
 
 ```text
-strava-auto-kudos-v1.0.6/
+strava-auto-kudos-v1.0.7/
   manifest.json
+  background.js
   popup.html
   popup.js
   content.js
@@ -65,7 +66,7 @@ strava-auto-kudos-v1.0.6/
 
 2. 打开右上角的 **Developer mode**。
 3. 点击 **Load unpacked**。
-4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.6` 文件夹。
+4. 选择包含 `manifest.json` 的 `strava-auto-kudos-v1.0.7` 文件夹。
 5. 打开或刷新 Strava：
 
    ```text
@@ -117,7 +118,7 @@ git pull
    - **Any time**：不按日期过滤，处理页面上可见和后续加载的动态。
    - **Last N days/months/years**：只处理最近 N 天、N 个月或 N 年内的动态。
 9. 如果启用了日期过滤，扩展会读取每条 Strava 动态里的时间文本。无法识别日期的动态会被跳过，避免误点超出你设置范围的 kudos。
-10. 保持当前 Strava 标签页打开，等待扩展处理动态里的 kudos 按钮。扩展会在当前批次处理完后继续向下滚动，尝试发现新加载的动态。
+10. 保持 Strava 标签页打开即可。运行开始后可以关闭扩展弹窗，也可以切换到其他 Chrome 窗口继续做别的事；kudos 流程会继续在 Strava 标签页中运行。
 11. 如果想中途停止，重新打开扩展弹窗并点击 **Stop**。
 
 如果你在安装或重新加载扩展之前已经打开了 Strava 页面，请先刷新 Strava 标签页，否则 Chrome 可能还没有注入 content script。
@@ -132,6 +133,8 @@ git pull
 - Skips disabled buttons.
 - Checks button state before clicking so already-given kudos are not clicked again.
 - Keeps rescanning after it reaches the end of the current loaded batch and scrolls down to discover newly loaded feed items.
+- Starts the kudos run through a Manifest V3 background service worker so the popup does not need to stay open.
+- Lets the user switch to another Chrome tab or window while the Strava tab continues processing.
 - Lets the user set the minimum and maximum delay between kudos actions from the popup.
 - Lets the user limit automation to activities from **Any time** or **Last N days/months/years**.
 - Skips out-of-range activities when a date filter is active.
@@ -148,7 +151,7 @@ git pull
   - occasional longer pauses
 - Simulates a more natural interaction path with hover, move, focus, pointer down, pointer up, mouse events, and the native `button.click()`.
 - Includes a **Stop** button that requests cancellation while the sequence is running.
-- Returns a popup summary showing how many kudos buttons were scanned, clicked, and skipped.
+- Returns popup status showing whether a kudos sequence is running and the latest click/skip metrics when available.
 
 ## Files
 
@@ -156,8 +159,9 @@ This is a standalone Manifest V3 extension with no build step and no external de
 
 ```text
 manifest.json  Chrome Extension MV3 manifest and Strava URL scope
+background.js  MV3 service worker for tab routing, script injection, start, stop, and status messages
 popup.html     Minimal popup UI
-popup.js       Active-tab validation and message dispatch
+popup.js       Popup settings and runtime message dispatch
 content.js     Strava feed DOM scanning and kudos interaction flow
 README.md      Project documentation
 ```
@@ -168,7 +172,7 @@ The manifest is intentionally narrow:
 
 ```json
 {
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": ["https://www.strava.com/*"]
 }
 ```
@@ -186,7 +190,7 @@ The extension does not request broad browsing access. It is scoped to `https://w
 2. Download the package named like:
 
    ```text
-strava-auto-kudos-v1.0.6.zip
+strava-auto-kudos-v1.0.7.zip
    ```
 
 3. Unzip it somewhere stable on your computer. Do not load it from a temporary downloads folder if you plan to keep using it.
@@ -194,8 +198,9 @@ strava-auto-kudos-v1.0.6.zip
 4. Confirm the folder you will load contains `manifest.json` directly:
 
    ```text
-strava-auto-kudos-v1.0.6/
+strava-auto-kudos-v1.0.7/
      manifest.json
+     background.js
      popup.html
      popup.js
      content.js
@@ -274,14 +279,15 @@ Then reload the extension from `chrome://extensions`.
 6. Press **Give kudos**.
 7. If the active tab is not on Strava, the extension opens the Strava dashboard first.
 8. If Strava appears logged out, the extension warns you to log in before running.
-9. Leave the tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
-10. To interrupt an active run, open the popup again and press **Stop**.
+9. Leave the Strava tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
+10. After the popup says the run started, you can close the popup and use another Chrome tab or window. The Strava tab continues running in the background as long as Chrome keeps the page alive.
+11. To interrupt an active run, open the popup again and press **Stop**.
 
 If Strava was already open before you installed or reloaded the extension, refresh the Strava tab once so Chrome injects the content script.
 
 ## How The Automation Works
 
-The popup sends a message to the content script running on the active Strava tab:
+The popup sends a message to the extension background service worker:
 
 ```js
 {
@@ -295,7 +301,15 @@ The popup sends a message to the content script running on the active Strava tab
 }
 ```
 
-The content script then:
+The background service worker then:
+
+1. Uses the current Strava tab when possible.
+2. Activates an existing Strava tab or opens `https://www.strava.com/dashboard` when needed.
+3. Injects `content.js` if Chrome has not connected the receiving content script yet.
+4. Checks Strava login state before starting.
+5. Sends the start command to the content script and stores the active run tab for later status and stop requests.
+
+The content script returns a start confirmation immediately, then continues the kudos loop inside the Strava tab:
 
 1. Selects candidate buttons with `button[data-testid="give_kudos_button"]` and legacy `button[data-testid="kudos_button"]`.
 2. Filters out disabled buttons and non-action "view all kudos" summary buttons.
@@ -358,6 +372,7 @@ You can run these local checks from the project directory.
 ```bash
 node --check popup.js
 node --check content.js
+node --check background.js
 ```
 
 ### Manifest Parse Check
@@ -385,6 +400,7 @@ Expected:
 3
 activeTab
 scripting
+storage
 https://www.strava.com/*
 ```
 
@@ -402,13 +418,13 @@ manifest.json
 
 If you see another folder first, open that inner folder and select it instead.
 
-### The popup says to open Strava first
+### The popup opens Strava first
 
-The active tab must be on `https://www.strava.com/*`. The extension will not run on other sites.
+If the active tab is not on `https://www.strava.com/*`, the background service worker opens or activates the Strava dashboard before starting the run.
 
 ### Nothing happens after clicking the popup button
 
-Use the newest release package. Version `v1.0.6` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
+Use the newest release package. Version `v1.0.7` can inject the content script when Chrome reports `Could not establish connection. Receiving end does not exist.`
 
 If you are on an older version, refresh the Strava tab after installing or reloading the extension. Chrome only injects content scripts into matching pages after the extension is loaded.
 
@@ -418,7 +434,7 @@ Open the Strava tab, log in normally, then run the extension again.
 
 ### It clicks fewer buttons than expected
 
-Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons. Version `v1.0.5` also follows Strava's current `give_kudos_button` selector and skips non-action "view all kudos" buttons. Version `v1.0.6` adds the activity date filter, so out-of-range activities and unreadable dates are skipped when the filter is enabled.
+Older versions only processed the kudos buttons loaded when the run started. Version `v1.0.4` keeps scrolling and rescanning after the current batch ends, then stops after several discovery attempts do not reveal new kudos buttons. Version `v1.0.5` also follows Strava's current `give_kudos_button` selector and skips non-action "view all kudos" buttons. Version `v1.0.6` adds the activity date filter, so out-of-range activities and unreadable dates are skipped when the filter is enabled. Version `v1.0.7` starts runs through a background service worker, so the popup does not need to remain open.
 
 ### Already-clicked kudos are skipped
 

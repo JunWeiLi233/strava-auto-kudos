@@ -4,38 +4,35 @@
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
-  const SETTINGS_STORAGE_KEY = "stravaAutoKudosSettings";
-  const LANGUAGE_STORAGE_KEY = "stravaAutoKudosLanguage";
+  const SETTINGS_KEY = "stravaAutoKudosSettingsV2";
+  const LANGUAGE_KEY = "stravaAutoKudosLanguage";
+  const LAST_RUN_KEY = "stravaAutoKudosLastRun";
   const DEFAULT_LANGUAGE = "en";
   const SUPPORTED_LANGUAGES = Object.freeze(["en", "zh"]);
-  const DEFAULT_DELAY_RANGE_SECONDS = Object.freeze({
-    min: 1.7,
-    max: 4.6
+  const DEFAULT_SETTINGS = Object.freeze({
+    autoMode: false,
+    scheduleIntervalMinutes: 30,
+    minDelaySeconds: 1.7,
+    maxDelaySeconds: 4.6,
+    dateRangeMode: "any",
+    dateRangeValue: 7,
+    dateRangeUnit: "days",
+    relationshipFilterMode: "connected"
   });
-  const DEFAULT_DATE_RANGE = Object.freeze({
-    mode: "any",
-    value: 7,
-    unit: "days"
-  });
-  const DEFAULT_RELATIONSHIP_FILTER = Object.freeze({
-    mode: "connected"
-  });
-  const DELAY_LIMIT_SECONDS = Object.freeze({
-    min: 0.8,
-    max: 120
-  });
+  const DELAY_LIMIT_SECONDS = Object.freeze({ min: 0.8, max: 120 });
   const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
   const RELATIONSHIP_FILTER_MODES = Object.freeze(["connected", "any"]);
-  const DATE_RANGE_LIMITS = Object.freeze({
-    days: 3650,
-    months: 120,
-    years: 10
-  });
+  const DATE_RANGE_LIMITS = Object.freeze({ days: 3650, months: 120, years: 10 });
+
   const TRANSLATIONS = Object.freeze({
     en: {
       title: "Strava Kudos",
       languageButtonLabel: "Switch language to Chinese",
-      runButton: "Give kudos",
+      autoModeLabel: "Auto mode",
+      autoModeDesc: "Automatically give kudos on schedule",
+      scheduleLegend: "Schedule",
+      scheduleIntervalLabel: "Check every (minutes)",
+      runNowButton: "Run now",
       stopButton: "Stop",
       delayLegend: "Kudos delay",
       minDelayLabel: "Min sec",
@@ -56,16 +53,16 @@
       daysUnit: "days",
       monthsUnit: "months",
       yearsUnit: "years",
-      readyStatus: "Ready on Strava.",
+      readyStatus: "Set your filters and enable Auto mode.",
+      autoOnStatus: "Auto mode on. Kudos will run automatically on Strava.",
+      autoOffStatus: "Auto mode off. Use Run now to give kudos manually.",
       validDelayError: "Enter a valid kudos delay range.",
       minDelayError: "Delay must be at least {min} seconds.",
       maxDelayError: "Delay must be {max} seconds or less.",
       minDelayOrderError: "Min delay must be less than or equal to max delay.",
-      chooseDateUnitError: "Choose days, months, or years for the date filter.",
-      wholeDateRangeError: "Enter a whole number for the date range.",
-      dateRangeLimitError: "Date range must be {limit} {unit} or less.",
-      noConfirmationStatus: "No kudos run confirmation received.",
-      startedStatus: "Kudos started. You can use other windows while the Strava tab stays open.",
+      settingsSaved: "Settings saved.",
+      invalidSchedule: "Schedule interval must be between 5 and 1440 minutes.",
+      startedStatus: "Kudos started. Keep a Strava tab open.",
       stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
       clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
       runningProgressStatus: "{status} Clicked {clicked}; scanned {scanned}; skipped {skipped}; scrolls {scrolls}; waits {waits}; refreshes {refreshes}.",
@@ -73,24 +70,21 @@
       clickPlural: "clicks",
       buttonSingular: "button",
       buttonPlural: "buttons",
-      stoppingStatus: "Stopping after the current movement...",
-      backgroundStatus: "Kudos sequence is running. You can use other windows while Strava stays open.",
+      stoppingStatus: "Stopping after current action...",
+      backgroundStatus: "Kudos running. You can use other windows.",
       startStatus: "Starting Strava kudos...",
-      loginRequired: "Please log in to Strava, then run this extension again.",
+      loginRequired: "Please log in to Strava first.",
       unableStart: "Unable to start kudos sequence.",
       stopRequestStatus: "Sending stop request...",
       unableStop: "Unable to stop kudos sequence.",
-      delaySaved: "Delay range saved.",
-      invalidDelay: "Invalid delay range.",
-      dateSaved: "Date filter saved.",
-      invalidDate: "Invalid date filter.",
-      relationshipSaved: "Relationship filter saved.",
-      invalidRelationship: "Invalid relationship filter.",
       noRunningStatus: "No kudos sequence is running.",
       openStravaStatus: "Open Strava to run kudos.",
       alreadyRunningStatus: "Kudos sequence is already running.",
-      recentActivityBoundaryStatus: "Reached Strava's no-more-recent-activities boundary; stopped.",
-      dateBoundaryStatus: "Reached the selected Activity date boundary; stopped.",
+      recentActivityBoundaryStatus: "Reached Strava's recent-activity boundary; stopped.",
+      dateBoundaryStatus: "Reached the activity-date boundary; stopped.",
+      lastRunLabel: "Last run: {time}",
+      lastRunStats: "{clicked} kudos given, {scanned} scanned",
+      never: "never",
       runStatusStarting: "Starting kudos sequence.",
       runStatusRecentBoundary: "Reached Strava recent-activity boundary.",
       runStatusDateBoundary: "Reached the configured activity-date boundary.",
@@ -98,16 +92,20 @@
       runStatusRechecking: "Re-checking the kudos button before clicking.",
       runStatusClicked: "Clicked a kudos button.",
       runStatusResumed: "Resumed after refreshing Strava.",
-      runStatusBatchComplete: "Loaded batch is complete; scrolling for more activities.",
-      runStatusScrolling: "Scrolling the dashboard to let Strava load more activities.",
+      runStatusBatchComplete: "Loaded batch complete; scrolling for more activities.",
+      runStatusScrolling: "Scrolling dashboard for more activities.",
       runStatusMoreLoaded: "More feed content loaded; scanning again.",
-      runStatusHiddenWaiting: "Strava tab is hidden; waiting before the next discovery scroll.",
-      runStatusWaiting: "Waiting briefly for Strava to fetch more activities."
+      runStatusHiddenWaiting: "Strava tab hidden; waiting before next scroll.",
+      runStatusWaiting: "Waiting for Strava to fetch more activities."
     },
     zh: {
       title: "Strava Kudos",
       languageButtonLabel: "切换到英文",
-      runButton: "给 kudos",
+      autoModeLabel: "自动模式",
+      autoModeDesc: "按计划自动给 kudos",
+      scheduleLegend: "计划",
+      scheduleIntervalLabel: "检查间隔（分钟）",
+      runNowButton: "立即运行",
       stopButton: "停止",
       delayLegend: "Kudos 间隔",
       minDelayLabel: "最短秒数",
@@ -128,16 +126,16 @@
       daysUnit: "天",
       monthsUnit: "个月",
       yearsUnit: "年",
-      readyStatus: "Strava 已就绪。",
+      readyStatus: "设置过滤条件并开启自动模式。",
+      autoOnStatus: "自动模式已开启。Kudos 将在 Strava 上自动运行。",
+      autoOffStatus: "自动模式已关闭。使用立即运行手动给 kudos。",
       validDelayError: "请输入有效的 kudos 间隔范围。",
       minDelayError: "间隔至少需要 {min} 秒。",
       maxDelayError: "间隔不能超过 {max} 秒。",
       minDelayOrderError: "最短间隔必须小于或等于最长间隔。",
-      chooseDateUnitError: "请选择天、月或年作为日期过滤单位。",
-      wholeDateRangeError: "请输入整数日期范围。",
-      dateRangeLimitError: "日期范围不能超过 {limit} {unit}。",
-      noConfirmationStatus: "没有收到 kudos 运行确认。",
-      startedStatus: "Kudos 已开始。保持 Strava 标签页打开后，你可以使用其他窗口。",
+      settingsSaved: "设置已保存。",
+      invalidSchedule: "计划间隔必须在 5 到 1440 分钟之间。",
+      startedStatus: "Kudos 已开始。保持 Strava 标签页打开。",
       stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
       clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
       runningProgressStatus: "{status} 已点击 {clicked} 次；扫描 {scanned} 个；跳过 {skipped} 个；滚动 {scrolls} 次；等待 {waits} 次；刷新 {refreshes} 次。",
@@ -146,23 +144,20 @@
       buttonSingular: "按钮",
       buttonPlural: "按钮",
       stoppingStatus: "正在完成当前动作后停止...",
-      backgroundStatus: "Kudos 流程正在运行。保持 Strava 打开后，你可以使用其他窗口。",
+      backgroundStatus: "Kudos 正在运行。你可以使用其他窗口。",
       startStatus: "正在启动 Strava kudos...",
-      loginRequired: "请先登录 Strava，然后再使用扩展。",
+      loginRequired: "请先登录 Strava。",
       unableStart: "无法启动 kudos 流程。",
       stopRequestStatus: "正在发送停止请求...",
       unableStop: "无法停止 kudos 流程。",
-      delaySaved: "间隔范围已保存。",
-      invalidDelay: "间隔范围无效。",
-      dateSaved: "日期过滤已保存。",
-      invalidDate: "日期过滤无效。",
-      relationshipSaved: "关系过滤已保存。",
-      invalidRelationship: "关系过滤无效。",
       noRunningStatus: "当前没有正在运行的 kudos 流程。",
       openStravaStatus: "请打开 Strava 后再运行 kudos。",
       alreadyRunningStatus: "Kudos 流程已经在运行。",
-      recentActivityBoundaryStatus: "已到达 Strava“没有更多近期活动”提示，流程已停止。",
-      dateBoundaryStatus: "已到达选择的动态日期边界，流程已停止。",
+      recentActivityBoundaryStatus: "已到达 Strava 近期动态边界，流程已停止。",
+      dateBoundaryStatus: "已到达动态日期边界，流程已停止。",
+      lastRunLabel: "上次运行：{time}",
+      lastRunStats: "已给 {clicked} 个 kudos，扫描 {scanned} 个",
+      never: "从未",
       runStatusStarting: "正在启动 kudos 流程。",
       runStatusRecentBoundary: "已到达 Strava 近期动态边界。",
       runStatusDateBoundary: "已到达设置的动态日期边界。",
@@ -171,14 +166,17 @@
       runStatusClicked: "已点击一个 kudos 按钮。",
       runStatusResumed: "刷新 Strava 后已恢复。",
       runStatusBatchComplete: "当前批次已完成，正在滚动查找更多动态。",
-      runStatusScrolling: "正在滚动仪表盘，等待 Strava 加载更多动态。",
+      runStatusScrolling: "正在滚动仪表盘，等待加载更多动态。",
       runStatusMoreLoaded: "已加载更多动态，正在继续扫描。",
       runStatusHiddenWaiting: "Strava 标签页在后台，正在等待下次滚动。",
-      runStatusWaiting: "正在短暂等待 Strava 获取更多动态。"
+      runStatusWaiting: "正在等待 Strava 获取更多动态。"
     }
   });
 
-  const runButton = document.getElementById("runButton");
+  const autoModeToggle = document.getElementById("autoModeToggle");
+  const autoModeSection = document.getElementById("autoModeSection");
+  const scheduleInterval = document.getElementById("scheduleInterval");
+  const runNowButton = document.getElementById("runNowButton");
   const stopButton = document.getElementById("stopButton");
   const languageButton = document.getElementById("languageButton");
   const minDelayInput = document.getElementById("minDelayInput");
@@ -188,13 +186,13 @@
   const dateRangeUnit = document.getElementById("dateRangeUnit");
   const relationshipFilterMode = document.getElementById("relationshipFilterMode");
   const statusText = document.getElementById("status");
-  const statusDot = document.getElementById("statusDot");
+  const lastRunEl = document.getElementById("lastRun");
   let currentLanguage = loadLanguage();
   let lastStatus = { key: "readyStatus", params: {}, state: "ready" };
 
   function loadLanguage() {
     try {
-      const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      const stored = window.localStorage.getItem(LANGUAGE_KEY);
       return SUPPORTED_LANGUAGES.includes(stored) ? stored : DEFAULT_LANGUAGE;
     } catch (_error) {
       return DEFAULT_LANGUAGE;
@@ -203,10 +201,8 @@
 
   function saveLanguage(language) {
     try {
-      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
-    } catch (_error) {
-      // Language persistence is optional; the popup can still switch for this session.
-    }
+      window.localStorage.setItem(LANGUAGE_KEY, language);
+    } catch (_error) {}
   }
 
   function t(key, params) {
@@ -221,29 +217,31 @@
     return currentLanguage === "zh" ? "zh-CN" : "en";
   }
 
+  function formatTime(ts) {
+    if (!ts) return t("never");
+    const d = new Date(ts);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const time = d.toLocaleTimeString(currentLanguage === "zh" ? "zh-CN" : "en-US", { hour: "2-digit", minute: "2-digit" });
+    if (isToday) return time;
+    const date = d.toLocaleDateString(currentLanguage === "zh" ? "zh-CN" : "en-US", { month: "short", day: "numeric" });
+    return date + " " + time;
+  }
+
   function renderStatusDescriptor(descriptor) {
     if (descriptor && descriptor.key) {
       return t(descriptor.key, descriptor.params);
     }
-
     return descriptor && descriptor.text ? descriptor.text : "";
   }
 
   function setStatusDescriptor(descriptor, state) {
-    lastStatus = {
-      ...descriptor,
-      state
-    };
+    lastStatus = { ...descriptor, state };
     statusText.textContent = renderStatusDescriptor(lastStatus);
-    statusDot.dataset.state = state;
   }
 
-  function setStatusKey(key, state, params) {
-    setStatusDescriptor({ key, params: params || {} }, state);
-  }
-
-  function setStatusText(message, state) {
-    setStatusDescriptor({ text: message }, state);
+  function setStatusKey(key, params) {
+    setStatusDescriptor({ key, params: params || {} }, "ready");
   }
 
   function applyLanguage() {
@@ -251,10 +249,10 @@
     document.querySelectorAll("[data-i18n]").forEach((element) => {
       element.textContent = t(element.dataset.i18n);
     });
-
     languageButton.textContent = currentLanguage === "en" ? "中文" : "EN";
     languageButton.setAttribute("aria-label", t("languageButtonLabel"));
     statusText.textContent = renderStatusDescriptor(lastStatus);
+    updateLastRunDisplay();
   }
 
   function toggleLanguage() {
@@ -264,8 +262,47 @@
   }
 
   function setRunningControls(isRunning, stopPending) {
-    runButton.disabled = Boolean(isRunning);
+    runNowButton.disabled = Boolean(isRunning);
     stopButton.disabled = !isRunning || Boolean(stopPending);
+  }
+
+  function updateAutoModeUI(autoMode) {
+    autoModeToggle.checked = Boolean(autoMode);
+    if (autoMode) {
+      autoModeSection.classList.add("active");
+    } else {
+      autoModeSection.classList.remove("active");
+    }
+  }
+
+  async function loadAllSettings() {
+    try {
+      const stored = await chromeStorageGet(SETTINGS_KEY);
+      const settings = { ...DEFAULT_SETTINGS, ...(stored || {}) };
+      return settings;
+    } catch (_error) {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  function chromeStorageGet(key) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(key, (items) => {
+        resolve(items ? items[key] : null);
+      });
+    });
+  }
+
+  function chromeStorageSet(items) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set(items, () => {
+        resolve(!chrome.runtime.lastError);
+      });
+    });
+  }
+
+  async function saveAllSettings(settings) {
+    return chromeStorageSet({ [SETTINGS_KEY]: settings });
   }
 
   function parseSeconds(value) {
@@ -275,90 +312,23 @@
 
   function parsePositiveInteger(value) {
     const text = String(value || "").trim();
-    if (!/^\d+$/.test(text)) {
-      return null;
-    }
-
+    if (!/^\d+$/.test(text)) return null;
     const parsed = Number.parseInt(text, 10);
     return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : null;
   }
 
-  function loadStoredSettings() {
-    try {
-      const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (!raw) {
-        return {};
-      }
-
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (_error) {
-      return {};
-    }
-  }
-
-  function saveStoredSettings(settings) {
-    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
-      ...loadStoredSettings(),
-      ...settings
-    }));
-  }
-
-  function loadDelaySettings() {
-    const parsed = loadStoredSettings();
-    const min = parseSeconds(parsed.minDelaySeconds);
-    const max = parseSeconds(parsed.maxDelaySeconds);
-    if (min === null || max === null) {
-      return { ...DEFAULT_DELAY_RANGE_SECONDS };
-    }
-
-    return { min, max };
-  }
-
-  function saveDelaySettings(range) {
-    saveStoredSettings({
-      minDelaySeconds: range.min,
-      maxDelaySeconds: range.max
-    });
-  }
-
-  function applyDelaySettingsToInputs() {
-    const range = loadDelaySettings();
-    minDelayInput.value = String(range.min);
-    maxDelayInput.value = String(range.max);
-  }
-
-  function loadDateRangeSettings() {
-    const stored = loadStoredSettings();
-    const mode = stored.dateRangeMode === "last" ? "last" : DEFAULT_DATE_RANGE.mode;
-    const unit = DATE_RANGE_UNITS.includes(stored.dateRangeUnit) ? stored.dateRangeUnit : DEFAULT_DATE_RANGE.unit;
-    const value = parsePositiveInteger(stored.dateRangeValue) || DEFAULT_DATE_RANGE.value;
-
-    return {
-      mode,
-      value: Math.min(value, DATE_RANGE_LIMITS[unit]),
-      unit
-    };
-  }
-
-  function saveDateRangeSettings(range) {
-    saveStoredSettings({
-      dateRangeMode: range.mode,
-      dateRangeValue: range.value,
-      dateRangeUnit: range.unit
-    });
-  }
-
-  function loadRelationshipFilterSettings() {
-    const stored = loadStoredSettings();
-    const mode = RELATIONSHIP_FILTER_MODES.includes(stored.relationshipFilterMode) ? stored.relationshipFilterMode : DEFAULT_RELATIONSHIP_FILTER.mode;
-    return { mode };
-  }
-
-  function saveRelationshipFilterSettings(filter) {
-    saveStoredSettings({
-      relationshipFilterMode: filter.mode
-    });
+  async function applySettingsToUI() {
+    const s = await loadAllSettings();
+    updateAutoModeUI(s.autoMode);
+    scheduleInterval.value = String(s.scheduleIntervalMinutes || DEFAULT_SETTINGS.scheduleIntervalMinutes);
+    minDelayInput.value = String(s.minDelaySeconds);
+    maxDelayInput.value = String(s.maxDelaySeconds);
+    dateRangeMode.value = s.dateRangeMode;
+    dateRangeValue.value = String(s.dateRangeValue);
+    dateRangeUnit.value = s.dateRangeUnit;
+    relationshipFilterMode.value = s.relationshipFilterMode;
+    setDateRangeControlsEnabled();
+    updateLastRunDisplay();
   }
 
   function setDateRangeControlsEnabled() {
@@ -367,133 +337,66 @@
     dateRangeUnit.disabled = !isActive;
   }
 
-  function applyDateRangeSettingsToInputs() {
-    const range = loadDateRangeSettings();
-    dateRangeMode.value = range.mode;
-    dateRangeValue.value = String(range.value);
-    dateRangeUnit.value = range.unit;
-    setDateRangeControlsEnabled();
-  }
-
-  function applyRelationshipFilterSettingsToInputs() {
-    const filter = loadRelationshipFilterSettings();
-    relationshipFilterMode.value = filter.mode;
-  }
-
-  function unitLabel(unit) {
-    if (unit === "months") {
-      return t("monthsUnit");
-    }
-    if (unit === "years") {
-      return t("yearsUnit");
-    }
-
-    return t("daysUnit");
-  }
-
-  function readDelaySettings() {
+  async function readAndSaveSettings() {
     const min = parseSeconds(minDelayInput.value);
     const max = parseSeconds(maxDelayInput.value);
+    if (min === null || max === null) throw new Error(t("validDelayError"));
+    if (min < DELAY_LIMIT_SECONDS.min || max < DELAY_LIMIT_SECONDS.min) throw new Error(t("minDelayError", { min: DELAY_LIMIT_SECONDS.min }));
+    if (min > DELAY_LIMIT_SECONDS.max || max > DELAY_LIMIT_SECONDS.max) throw new Error(t("maxDelayError", { max: DELAY_LIMIT_SECONDS.max }));
+    if (min > max) throw new Error(t("minDelayOrderError"));
 
-    if (min === null || max === null) {
-      throw new Error(t("validDelayError"));
-    }
+    const interval = Number(scheduleInterval.value);
+    if (!Number.isFinite(interval) || interval < 5 || interval > 1440) throw new Error(t("invalidSchedule"));
 
-    if (min < DELAY_LIMIT_SECONDS.min || max < DELAY_LIMIT_SECONDS.min) {
-      throw new Error(t("minDelayError", { min: DELAY_LIMIT_SECONDS.min }));
-    }
+    const drMode = dateRangeMode.value === "last" ? "last" : "any";
+    const drUnit = DATE_RANGE_UNITS.includes(dateRangeUnit.value) ? dateRangeUnit.value : "days";
+    let drValue = parsePositiveInteger(dateRangeValue.value) || 7;
+    if (drValue > DATE_RANGE_LIMITS[drUnit]) drValue = DATE_RANGE_LIMITS[drUnit];
 
-    if (min > DELAY_LIMIT_SECONDS.max || max > DELAY_LIMIT_SECONDS.max) {
-      throw new Error(t("maxDelayError", { max: DELAY_LIMIT_SECONDS.max }));
-    }
+    const relMode = RELATIONSHIP_FILTER_MODES.includes(relationshipFilterMode.value) ? relationshipFilterMode.value : "connected";
 
-    if (min > max) {
-      throw new Error(t("minDelayOrderError"));
-    }
-
-    const normalized = {
-      min: Math.round(min * 10) / 10,
-      max: Math.round(max * 10) / 10
+    const settings = {
+      autoMode: autoModeToggle.checked,
+      scheduleIntervalMinutes: Math.round(interval),
+      minDelaySeconds: Math.round(min * 10) / 10,
+      maxDelaySeconds: Math.round(max * 10) / 10,
+      dateRangeMode: drMode,
+      dateRangeValue: drValue,
+      dateRangeUnit: drUnit,
+      relationshipFilterMode: relMode
     };
-    saveDelaySettings(normalized);
-    return normalized;
+    await saveAllSettings(settings);
+    return settings;
   }
 
-  function readDateRangeSettings() {
-    const mode = dateRangeMode.value === "last" ? "last" : "any";
-    const unit = DATE_RANGE_UNITS.includes(dateRangeUnit.value) ? dateRangeUnit.value : null;
-    const fallbackValue = parsePositiveInteger(dateRangeValue.value) || DEFAULT_DATE_RANGE.value;
-
-    if (!unit) {
-      throw new Error(t("chooseDateUnitError"));
-    }
-
-    if (mode === "any") {
-      const saved = {
-        mode,
-        value: Math.min(fallbackValue, DATE_RANGE_LIMITS[unit]),
-        unit
-      };
-      saveDateRangeSettings(saved);
-      return { mode };
-    }
-
-    const value = parsePositiveInteger(dateRangeValue.value);
-    if (value === null) {
-      throw new Error(t("wholeDateRangeError"));
-    }
-
-    if (value > DATE_RANGE_LIMITS[unit]) {
-      throw new Error(t("dateRangeLimitError", {
-        limit: DATE_RANGE_LIMITS[unit],
-        unit: unitLabel(unit)
-      }));
-    }
-
-    const normalized = { mode, value, unit };
-    saveDateRangeSettings(normalized);
-    return normalized;
-  }
-
-  function readRelationshipFilterSettings() {
-    const mode = RELATIONSHIP_FILTER_MODES.includes(relationshipFilterMode.value) ? relationshipFilterMode.value : null;
-    if (!mode) {
-      throw new Error(t("invalidRelationship"));
-    }
-
-    const normalized = { mode };
-    saveRelationshipFilterSettings(normalized);
-    return normalized;
-  }
-
-  function buildRunSettings() {
-    const range = readDelaySettings();
+  function buildRunSettingsFromUI(settings) {
+    const s = settings || {};
     return {
       betweenTargets: {
-        min: Math.round(range.min * 1000),
-        max: Math.round(range.max * 1000)
+        min: Math.round((s.minDelaySeconds || 1.7) * 1000),
+        max: Math.round((s.maxDelaySeconds || 4.6) * 1000)
       },
-      dateRange: readDateRangeSettings(),
-      relationshipFilter: readRelationshipFilterSettings()
+      dateRange: {
+        mode: s.dateRangeMode || "any",
+        value: s.dateRangeValue || 7,
+        unit: s.dateRangeUnit || "days"
+      },
+      relationshipFilter: {
+        mode: s.relationshipFilterMode || "connected"
+      }
     };
   }
 
-  function sendRuntimeAction(action, settings) {
-    const payload = {
-      action,
-      source: "strava-auto-kudos-popup",
-      requestedAt: Date.now(),
-      settings: settings || null
-    };
-
+  function sendRuntimeAction(action, runSettings) {
     return new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage(payload, (response) => {
+      chrome.runtime.sendMessage({
+        action,
+        source: "strava-auto-kudos-popup",
+        requestedAt: Date.now(),
+        settings: runSettings || null
+      }, (response) => {
         const error = chrome.runtime.lastError;
-        if (error) {
-          reject(new Error(error.message));
-          return;
-        }
-
+        if (error) { reject(new Error(error.message)); return; }
         resolve(response);
       });
     });
@@ -505,39 +408,17 @@
   }
 
   function skippedCount(metrics) {
-    return Number(metrics.skippedAlreadyClicked || 0) +
-      Number(metrics.skippedDisabled || 0) +
-      Number(metrics.skippedMissing || 0) +
-      Number(metrics.skippedOutOfDate || 0) +
-      Number(metrics.skippedUnknownDate || 0) +
-      Number(metrics.skippedCached || 0) +
-      Number(metrics.skippedRelationship || 0);
-  }
-
-  function knownMessageKey(message) {
-    const text = String(message || "").toLowerCase();
-    if (/no .*kudos sequence is running/.test(text)) {
-      return "noRunningStatus";
-    }
-    if (/open strava/.test(text)) {
-      return "openStravaStatus";
-    }
-    if (/already running/.test(text)) {
-      return "alreadyRunningStatus";
-    }
-    if (/please log in/.test(text)) {
-      return "loginRequired";
-    }
-
-    return null;
+    const m = metrics || {};
+    return Number(m.skippedAlreadyClicked || 0) +
+      Number(m.skippedDisabled || 0) + Number(m.skippedMissing || 0) +
+      Number(m.skippedOutOfDate || 0) + Number(m.skippedUnknownDate || 0) +
+      Number(m.skippedCached || 0) + Number(m.skippedRelationship || 0);
   }
 
   function resultStatusDescriptor(response) {
     if (!response || !response.ok) {
-      const key = knownMessageKey(response && response.message);
-      return key ? { key } : { key: "noConfirmationStatus" };
+      return { key: "noRunningStatus" };
     }
-
     if (response.started) {
       return { key: "startedStatus" };
     }
@@ -551,178 +432,179 @@
     const refreshes = Number(metrics.refreshes || 0);
 
     if (metrics.stopped) {
-      return {
-        key: "stoppedSummary",
-        params: {
-          clicked,
-          clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"),
-          scanned,
-          skipped,
-          relationship,
-          cached,
-          refreshes
-        }
-      };
+      return { key: "stoppedSummary", params: { clicked, clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"), scanned, skipped, relationship, cached, refreshes } };
     }
-
     if (metrics.endedAtRecentActivityBoundary) {
       return { key: "recentActivityBoundaryStatus" };
     }
-
     if (metrics.endedAtDateBoundary) {
       return { key: "dateBoundaryStatus" };
     }
-
-    const knownKey = knownMessageKey(response.message);
-    if (knownKey) {
-      return { key: knownKey };
-    }
-
-    if (response.message && !scanned && !clicked && !skipped) {
-      return { text: response.message };
-    }
-
-    return {
-      key: "clickedSummary",
-      params: {
-        clicked,
-        scanned,
-        buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"),
-        skipped,
-        relationship,
-        cached,
-        refreshes
-      }
-    };
+    return { key: "clickedSummary", params: { clicked, scanned, buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"), skipped, relationship, cached, refreshes } };
   }
 
   function runningStatusDescriptor(metrics) {
-    const safeMetrics = metrics || {};
+    const m = metrics || {};
     return {
       key: "runningProgressStatus",
       params: {
-        status: safeMetrics.currentStatusKey ? t(safeMetrics.currentStatusKey) : (safeMetrics.currentStatus || t("backgroundStatus")),
-        clicked: Number(safeMetrics.clicked || 0),
-        scanned: Number(safeMetrics.scanned || 0),
-        skipped: skippedCount(safeMetrics),
-        scrolls: Number(safeMetrics.discoveryScrolls || 0),
-        waits: Number(safeMetrics.idleDiscoveryAttempts || 0) + Number(safeMetrics.hiddenDiscoveryBackoffs || 0),
-        refreshes: Number(safeMetrics.refreshes || 0)
+        status: m.currentStatusKey ? t(m.currentStatusKey) : (m.currentStatus || t("backgroundStatus")),
+        clicked: Number(m.clicked || 0),
+        scanned: Number(m.scanned || 0),
+        skipped: skippedCount(m),
+        scrolls: Number(m.discoveryScrolls || 0),
+        waits: Number(m.idleDiscoveryAttempts || 0) + Number(m.hiddenDiscoveryBackoffs || 0),
+        refreshes: Number(m.refreshes || 0)
       }
     };
   }
 
-  function applyStatusResponse(response, quiet) {
+  async function updateLastRunDisplay() {
+    try {
+      const lastRun = await chromeStorageGet(LAST_RUN_KEY);
+      if (lastRun && lastRun.finishedAt) {
+        lastRunEl.style.display = "block";
+        const timeStr = formatTime(lastRun.finishedAt);
+        const clicked = Number(lastRun.clicked || 0);
+        const scanned = Number(lastRun.scanned || 0);
+        lastRunEl.textContent = t("lastRunLabel", { time: timeStr }) + " — " + t("lastRunStats", { clicked, scanned });
+      } else {
+        lastRunEl.style.display = "none";
+      }
+    } catch (_error) {
+      lastRunEl.style.display = "none";
+    }
+  }
+
+  async function applyStatusResponse(response, quiet) {
     const state = response && response.state ? response.state : {};
     const isRunning = Boolean(state.running);
     const stopPending = Boolean(state.cancelRequested);
-    const metrics = state.metrics || {};
     setRunningControls(isRunning, stopPending);
 
     if (isRunning && stopPending) {
-      setStatusKey("stoppingStatus", "busy");
+      setStatusDescriptor({ key: "stoppingStatus" }, "ready");
       return;
     }
-
     if (isRunning) {
-      setStatusDescriptor(runningStatusDescriptor(metrics), "busy");
+      setStatusDescriptor(runningStatusDescriptor(state.metrics), "ready");
       return;
     }
-
     if (!quiet) {
-      setStatusDescriptor(resultStatusDescriptor(response), response && response.ok ? "ready" : "error");
+      setStatusDescriptor(resultStatusDescriptor(response), "ready");
+    }
+
+    const settings = await loadAllSettings();
+    if (settings.autoMode && !isRunning) {
+      setStatusDescriptor({ key: "autoOnStatus" }, "ready");
+    } else if (!settings.autoMode && !isRunning) {
+      setStatusDescriptor({ key: "autoOffStatus" }, "ready");
     }
   }
 
   async function refreshStatus() {
     try {
       const response = await sendRuntimeAction(ACTION_STATUS_KUDOS);
-      applyStatusResponse(response, true);
+      await applyStatusResponse(response, true);
     } catch (_error) {
       setRunningControls(false, false);
     }
   }
 
-  async function run() {
+  async function runNow() {
     setRunningControls(true, false);
-    setStatusKey("startStatus", "busy");
+    setStatusDescriptor({ key: "startStatus" }, "ready");
 
     try {
-      const runSettings = buildRunSettings();
+      const settings = await loadAllSettings();
+      const runSettings = buildRunSettingsFromUI(settings);
       const response = await sendRuntimeAction(ACTION_RUN_KUDOS, runSettings);
+
       if (isLoggedOutResponse(response)) {
         setRunningControls(false, false);
-        setStatusKey("loginRequired", "error");
+        setStatusDescriptor({ key: "loginRequired" }, "ready");
         return;
       }
 
-      applyStatusResponse(response, true);
+      await applyStatusResponse(response, true);
       const state = response && response.state ? response.state : {};
-      setStatusDescriptor(resultStatusDescriptor(response), response && (response.ok || state.running) ? "busy" : "error");
+      if (response && (response.ok || state.running)) {
+        setStatusDescriptor(runningStatusDescriptor(state.metrics || {}), "ready");
+      } else {
+        setStatusDescriptor(resultStatusDescriptor(response), "ready");
+      }
     } catch (error) {
       setRunningControls(false, false);
-      setStatusText(error.message || t("unableStart"), "error");
+      setStatusDescriptor({ text: error.message || t("unableStart") }, "ready");
     }
   }
 
-  async function stop() {
+  async function stopRun() {
     setRunningControls(true, true);
-    setStatusKey("stopRequestStatus", "busy");
+    setStatusDescriptor({ key: "stopRequestStatus" }, "ready");
 
     try {
       const response = await sendRuntimeAction(ACTION_STOP_KUDOS);
       if (response && response.ok) {
-        applyStatusResponse(response, false);
+        await applyStatusResponse(response, false);
       } else {
-        setStatusDescriptor(resultStatusDescriptor(response), "ready");
         setRunningControls(false, false);
+        setStatusDescriptor(resultStatusDescriptor(response), "ready");
       }
     } catch (error) {
-      setStatusText(error.message || t("unableStop"), "error");
+      setStatusDescriptor({ text: error.message || t("unableStop") }, "ready");
       setRunningControls(false, false);
     }
   }
 
-  function saveDelayFromInputs() {
+  async function onAutoModeToggle() {
     try {
-      readDelaySettings();
-      setStatusKey("delaySaved", "ready");
-    } catch (error) {
-      setStatusText(error.message || t("invalidDelay"), "error");
+      const settings = await loadAllSettings();
+      settings.autoMode = autoModeToggle.checked;
+      await saveAllSettings(settings);
+      updateAutoModeUI(settings.autoMode);
+
+      if (settings.autoMode) {
+        setStatusDescriptor({ key: "autoOnStatus" }, "ready");
+        chrome.runtime.sendMessage({ action: "STRAVA_AUTO_KUDOS_AUTO_MODE_ON", settings });
+      } else {
+        setStatusDescriptor({ key: "autoOffStatus" }, "ready");
+        chrome.runtime.sendMessage({ action: "STRAVA_AUTO_KUDOS_AUTO_MODE_OFF" });
+      }
+    } catch (_error) {
+      updateAutoModeUI(false);
     }
   }
 
-  function saveDateRangeFromInputs() {
+  async function onSettingChanged() {
     try {
+      await readAndSaveSettings();
       setDateRangeControlsEnabled();
-      readDateRangeSettings();
-      setStatusKey("dateSaved", "ready");
+      setStatusDescriptor({ key: "settingsSaved" }, "ready");
+      notifySettingsChanged();
     } catch (error) {
-      setStatusText(error.message || t("invalidDate"), "error");
+      setStatusDescriptor({ text: error.message }, "ready");
     }
   }
 
-  function saveRelationshipFilterFromInputs() {
-    try {
-      readRelationshipFilterSettings();
-      setStatusKey("relationshipSaved", "ready");
-    } catch (error) {
-      setStatusText(error.message || t("invalidRelationship"), "error");
-    }
+  async function notifySettingsChanged() {
+    const settings = await loadAllSettings();
+    chrome.runtime.sendMessage({ action: "STRAVA_AUTO_KUDOS_SETTINGS_CHANGED", settings });
   }
 
-  runButton.addEventListener("click", run);
-  stopButton.addEventListener("click", stop);
+  autoModeToggle.addEventListener("change", onAutoModeToggle);
+  scheduleInterval.addEventListener("change", onSettingChanged);
+  minDelayInput.addEventListener("change", onSettingChanged);
+  maxDelayInput.addEventListener("change", onSettingChanged);
+  dateRangeMode.addEventListener("change", onSettingChanged);
+  dateRangeValue.addEventListener("change", onSettingChanged);
+  dateRangeUnit.addEventListener("change", onSettingChanged);
+  relationshipFilterMode.addEventListener("change", onSettingChanged);
+  runNowButton.addEventListener("click", runNow);
+  stopButton.addEventListener("click", stopRun);
   languageButton.addEventListener("click", toggleLanguage);
-  minDelayInput.addEventListener("change", saveDelayFromInputs);
-  maxDelayInput.addEventListener("change", saveDelayFromInputs);
-  dateRangeMode.addEventListener("change", saveDateRangeFromInputs);
-  dateRangeValue.addEventListener("change", saveDateRangeFromInputs);
-  dateRangeUnit.addEventListener("change", saveDateRangeFromInputs);
-  relationshipFilterMode.addEventListener("change", saveRelationshipFilterFromInputs);
+
   applyLanguage();
-  applyDelaySettingsToInputs();
-  applyDateRangeSettingsToInputs();
-  applyRelationshipFilterSettingsToInputs();
+  applySettingsToUI();
   refreshStatus();
 })();

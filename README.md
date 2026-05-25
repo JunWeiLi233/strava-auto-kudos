@@ -221,6 +221,20 @@ strava-auto-kudos-v1.0.13/
      README.md
    ```
 
+   Some unzip tools create an extra outer folder with the same name. In that case, do not select the outer folder:
+
+   ```text
+Downloads/
+     strava-auto-kudos-v1.0.13/              wrong: no manifest.json here
+       strava-auto-kudos-v1.0.13/            correct: select this folder
+         manifest.json
+         background.js
+         popup.html
+         popup.js
+         content.js
+         README.md
+   ```
+
 5. Open Chrome and go to:
 
    ```text
@@ -439,7 +453,19 @@ https://www.strava.com/*
 
 You selected a folder that does not directly contain `manifest.json`.
 
-Open the folder in File Explorer. The folder you select in Chrome must show this file directly:
+This commonly happens after unzipping a release ZIP, because the extracted files may be nested one folder deeper than expected. For example, if you selected:
+
+```text
+C:\Users\YourName\Downloads\strava-auto-kudos-v1.0.13
+```
+
+but that folder only contains another folder named `strava-auto-kudos-v1.0.13`, open the inner folder and select that instead:
+
+```text
+C:\Users\YourName\Downloads\strava-auto-kudos-v1.0.13\strava-auto-kudos-v1.0.13
+```
+
+Open the folder in File Explorer before loading it in Chrome. The folder you select in Chrome must show this file directly:
 
 ```text
 manifest.json

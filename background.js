@@ -4,11 +4,14 @@
   const ACTION_RUN_KUDOS = "STRAVA_AUTO_KUDOS_RUN";
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
+  const SETTINGS_KEY = "stravaAutoKudosSettingsV2";
+  const LAST_RUN_KEY = "stravaAutoKudosLastRun";
+  const ACTIVE_RUN_TAB_KEY = "activeRunTabId";
+  const ALARM_NAME = "stravaAutoKudosAlarm";
   const STRAVA_HOST = "www.strava.com";
   const STRAVA_URL_PATTERN = "https://www.strava.com/*";
   const STRAVA_DASHBOARD_URL = "https://www.strava.com/dashboard";
   const MISSING_RECEIVER_PATTERN = /Could not establish connection|Receiving end does not exist/i;
-  const ACTIVE_RUN_TAB_KEY = "activeRunTabId";
 
   function chromeError() {
     return chrome.runtime.lastError ? new Error(chrome.runtime.lastError.message) : null;
@@ -18,20 +21,14 @@
     try {
       const parsed = new URL(url);
       return parsed.protocol === "https:" && parsed.hostname === STRAVA_HOST;
-    } catch (_error) {
-      return false;
-    }
+    } catch (_error) { return false; }
   }
 
   function queryTabs(queryInfo) {
     return new Promise((resolve, reject) => {
       chrome.tabs.query(queryInfo, (tabs) => {
         const error = chromeError();
-        if (error) {
-          reject(error);
-          return;
-        }
-
+        if (error) { reject(error); return; }
         resolve(tabs || []);
       });
     });
@@ -40,25 +37,17 @@
   function getTab(tabId) {
     return new Promise((resolve) => {
       chrome.tabs.get(tabId, (tab) => {
-        if (chrome.runtime.lastError) {
-          resolve(null);
-          return;
-        }
-
+        if (chrome.runtime.lastError) { resolve(null); return; }
         resolve(tab || null);
       });
     });
   }
 
-  function createTab(url) {
+  function createTab(url, active) {
     return new Promise((resolve, reject) => {
-      chrome.tabs.create({ active: true, url }, (tab) => {
+      chrome.tabs.create({ active: Boolean(active), url }, (tab) => {
         const error = chromeError();
-        if (error) {
-          reject(error);
-          return;
-        }
-
+        if (error) { reject(error); return; }
         resolve(tab);
       });
     });
@@ -70,14 +59,9 @@
         reject(new Error("No Strava tab is available."));
         return;
       }
-
       chrome.tabs.update(tab.id, { active: true }, (updatedTab) => {
         const error = chromeError();
-        if (error) {
-          reject(error);
-          return;
-        }
-
+        if (error) { reject(error); return; }
         if (typeof tab.windowId === "number" && chrome.windows && chrome.windows.update) {
           chrome.windows.update(tab.windowId, { focused: true }, () => {
             chrome.runtime.lastError;
@@ -85,7 +69,6 @@
           });
           return;
         }
-
         resolve(updatedTab || tab);
       });
     });
@@ -108,52 +91,35 @@
       }, 12000);
 
       function listener(updatedTabId, changeInfo) {
-        if (updatedTabId !== tabId || changeInfo.status !== "complete") {
-          return;
-        }
-
+        if (updatedTabId !== tabId || changeInfo.status !== "complete") return;
         clearTimeout(timeoutId);
         chrome.tabs.onUpdated.removeListener(listener);
         resolve();
       }
-
       chrome.tabs.onUpdated.addListener(listener);
     });
   }
 
   function executeContentScript(tabId) {
     return new Promise((resolve, reject) => {
-      chrome.scripting.executeScript({
-        target: { tabId },
-        files: ["content.js"]
-      }, () => {
+      chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }, () => {
         const error = chromeError();
-        if (error) {
-          reject(error);
-          return;
-        }
-
+        if (error) { reject(error); return; }
         resolve();
       });
     });
   }
 
   function sendContentMessage(tabId, action, settings) {
-    const payload = {
-      action,
-      source: "strava-auto-kudos-background",
-      requestedAt: Date.now(),
-      settings: settings || null
-    };
-
     return new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tabId, payload, (response) => {
+      chrome.tabs.sendMessage(tabId, {
+        action,
+        source: "strava-auto-kudos-background",
+        requestedAt: Date.now(),
+        settings: settings || null
+      }, (response) => {
         const error = chromeError();
-        if (error) {
-          reject(error);
-          return;
-        }
-
+        if (error) { reject(error); return; }
         resolve(response);
       });
     });
@@ -163,68 +129,73 @@
     try {
       return await sendContentMessage(tabId, action, settings);
     } catch (error) {
-      if (!MISSING_RECEIVER_PATTERN.test(error.message || "")) {
-        throw error;
-      }
-
+      if (!MISSING_RECEIVER_PATTERN.test(error.message || "")) throw error;
       await executeContentScript(tabId);
       return sendContentMessage(tabId, action, settings);
     }
   }
 
-  function storageGet(key) {
+  function chromeStorageGet(key) {
     return new Promise((resolve) => {
-      chrome.storage.session.get(key, (items) => {
-        if (chrome.runtime.lastError) {
-          resolve(null);
-          return;
-        }
-
+      chrome.storage.local.get(key, (items) => {
         resolve(items ? items[key] : null);
       });
     });
   }
 
-  function storageSet(key, value) {
+  function chromeStorageSet(items) {
     return new Promise((resolve) => {
-      chrome.storage.session.set({ [key]: value }, () => {
-        resolve();
-      });
+      chrome.storage.local.set(items, () => { resolve(); });
     });
   }
 
-  function storageRemove(key) {
+  function chromeStorageRemove(key) {
     return new Promise((resolve) => {
-      chrome.storage.session.remove(key, () => {
-        resolve();
-      });
+      chrome.storage.local.remove(key, () => { resolve(); });
+    });
+  }
+
+  async function loadSettings() {
+    const stored = await chromeStorageGet(SETTINGS_KEY);
+    return stored || {};
+  }
+
+  async function getAutoMode() {
+    const settings = await loadSettings();
+    return Boolean(settings.autoMode);
+  }
+
+  async function saveLastRun(metrics) {
+    await chromeStorageSet({
+      [LAST_RUN_KEY]: {
+        finishedAt: Date.now(),
+        clicked: Number(metrics.clicked || 0),
+        scanned: Number(metrics.scanned || 0),
+        stopped: Boolean(metrics.stopped),
+        endedAtRecentActivityBoundary: Boolean(metrics.endedAtRecentActivityBoundary),
+        endedAtDateBoundary: Boolean(metrics.endedAtDateBoundary)
+      }
     });
   }
 
   async function keepRunTabAvailable(tabId) {
     await setTabAutoDiscardable(tabId, false);
-    await storageSet(ACTIVE_RUN_TAB_KEY, tabId);
+    await chromeStorageSet({ [ACTIVE_RUN_TAB_KEY]: tabId });
   }
 
   async function releaseRunTab(tabId) {
-    if (typeof tabId === "number") {
-      await setTabAutoDiscardable(tabId, true);
-    }
-    await storageRemove(ACTIVE_RUN_TAB_KEY);
+    if (typeof tabId === "number") await setTabAutoDiscardable(tabId, true);
+    await chromeStorageRemove(ACTIVE_RUN_TAB_KEY);
   }
 
   async function storedRunTab() {
-    const tabId = await storageGet(ACTIVE_RUN_TAB_KEY);
-    if (typeof tabId !== "number") {
-      return null;
-    }
-
+    const tabId = await chromeStorageGet(ACTIVE_RUN_TAB_KEY);
+    if (typeof tabId !== "number") return null;
     const tab = await getTab(tabId);
     if (!tab || !isSupportedStravaUrl(tab.url)) {
-      await storageRemove(ACTIVE_RUN_TAB_KEY);
+      await chromeStorageRemove(ACTIVE_RUN_TAB_KEY);
       return null;
     }
-
     return tab;
   }
 
@@ -240,32 +211,22 @@
 
   async function ensureStravaTabForRun() {
     const current = await activeTab();
-    if (current && isSupportedStravaUrl(current.url)) {
-      return current;
-    }
+    if (current && isSupportedStravaUrl(current.url)) return current;
 
     const existing = await firstStravaTab();
-    if (existing) {
-      return activateTab(existing);
-    }
+    if (existing) return activateTab(existing);
 
-    const created = await createTab(STRAVA_DASHBOARD_URL);
-    if (created && typeof created.id === "number") {
-      await waitForTabComplete(created.id);
-    }
+    const created = await createTab(STRAVA_DASHBOARD_URL, true);
+    if (created && typeof created.id === "number") await waitForTabComplete(created.id);
     return created;
   }
 
   async function resolveControlTab() {
     const stored = await storedRunTab();
-    if (stored) {
-      return stored;
-    }
+    if (stored) return stored;
 
     const current = await activeTab();
-    if (current && isSupportedStravaUrl(current.url)) {
-      return current;
-    }
+    if (current && isSupportedStravaUrl(current.url)) return current;
 
     return firstStravaTab();
   }
@@ -279,20 +240,13 @@
     return {
       ok: true,
       message: message || "No Strava kudos sequence is running.",
-      state: {
-        running: false,
-        cancelRequested: false,
-        login: null,
-        metrics: null
-      }
+      state: { running: false, cancelRequested: false, login: null, metrics: null }
     };
   }
 
   async function handleStatus() {
     const tab = await resolveControlTab();
-    if (!tab || typeof tab.id !== "number") {
-      return idleStatus("Open Strava to run kudos.");
-    }
+    if (!tab || typeof tab.id !== "number") return idleStatus("Open Strava to run kudos.");
 
     const response = await sendContentMessageWithInjection(tab.id, ACTION_STATUS_KUDOS);
     if (response && response.state && response.state.running) {
@@ -300,18 +254,12 @@
     } else {
       await releaseRunTab(tab.id);
     }
-
-    return {
-      ...(response || idleStatus()),
-      tabId: tab.id
-    };
+    return { ...(response || idleStatus()), tabId: tab.id };
   }
 
   async function handleRun(settings) {
     const tab = await ensureStravaTabForRun();
-    if (!tab || typeof tab.id !== "number") {
-      throw new Error("Unable to open Strava.");
-    }
+    if (!tab || typeof tab.id !== "number") throw new Error("Unable to open Strava.");
 
     const status = await sendContentMessageWithInjection(tab.id, ACTION_STATUS_KUDOS);
     if (isLoggedOutResponse(status)) {
@@ -328,11 +276,7 @@
     if (response && (response.started || (response.state && response.state.running))) {
       await keepRunTabAvailable(tab.id);
     }
-
-    return {
-      ...(response || {}),
-      tabId: tab.id
-    };
+    return { ...(response || {}), tabId: tab.id };
   }
 
   async function handleStop() {
@@ -341,40 +285,161 @@
       await releaseRunTab(null);
       return idleStatus();
     }
-
     const response = await sendContentMessageWithInjection(tab.id, ACTION_STOP_KUDOS);
-    return {
-      ...(response || idleStatus()),
-      tabId: tab.id
-    };
+    return { ...(response || idleStatus()), tabId: tab.id };
   }
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || !message.action) {
-      return false;
-    }
+  async function scheduleNextAlarm() {
+    const settings = await loadSettings();
+    if (!settings.autoMode) return;
 
-    let task = null;
-    if (message.action === ACTION_STATUS_KUDOS) {
-      task = handleStatus();
-    } else if (message.action === ACTION_RUN_KUDOS) {
-      task = handleRun(message.settings);
-    } else if (message.action === ACTION_STOP_KUDOS) {
-      task = handleStop();
-    } else {
-      return false;
-    }
+    const intervalMinutes = Number(settings.scheduleIntervalMinutes) || 30;
+    chrome.alarms.create(ALARM_NAME, { periodInMinutes: intervalMinutes });
+  }
 
-    task.then((result) => {
-      sendResponse(result);
-    }).catch((error) => {
-      sendResponse({
-        ok: false,
-        message: error && error.message ? error.message : "Strava Auto Kudos background task failed.",
-        state: null
-      });
+  async function clearSchedule() {
+    const exists = await new Promise((resolve) => {
+      chrome.alarms.get(ALARM_NAME, (alarm) => resolve(Boolean(alarm)));
     });
+    if (exists) {
+      chrome.alarms.clear(ALARM_NAME);
+    }
+  }
 
-    return true;
+  async function handleAlarm(alarm) {
+    if (alarm.name !== ALARM_NAME) return;
+
+    const autoMode = await getAutoMode();
+    if (!autoMode) return;
+
+    const settings = await loadSettings();
+
+    const statusTab = await resolveControlTab();
+    if (statusTab) {
+      try {
+        const status = await sendContentMessageWithInjection(statusTab.id, ACTION_STATUS_KUDOS);
+        if (status && status.state && status.state.running) return;
+      } catch (_error) {}
+    }
+
+    try {
+      await handleRun({
+        betweenTargets: {
+          min: Math.round((settings.minDelaySeconds || 1.7) * 1000),
+          max: Math.round((settings.maxDelaySeconds || 4.6) * 1000)
+        },
+        dateRange: {
+          mode: settings.dateRangeMode || "any",
+          value: settings.dateRangeValue || 7,
+          unit: settings.dateRangeUnit || "days"
+        },
+        relationshipFilter: {
+          mode: settings.relationshipFilterMode || "connected"
+        }
+      });
+    } catch (_error) {}
+  }
+
+  async function handleAutoModeOn(settings) {
+    const s = settings || await loadSettings();
+    await chromeStorageSet({ [SETTINGS_KEY]: s });
+    await scheduleNextAlarm();
+
+    const tab = await firstStravaTab();
+    if (tab) {
+      try {
+        const status = await sendContentMessageWithInjection(tab.id, ACTION_STATUS_KUDOS);
+        if (!status || !(status.state && status.state.running)) {
+          const runSettings = {
+            betweenTargets: { min: Math.round((s.minDelaySeconds || 1.7) * 1000), max: Math.round((s.maxDelaySeconds || 4.6) * 1000) },
+            dateRange: { mode: s.dateRangeMode || "any", value: s.dateRangeValue || 7, unit: s.dateRangeUnit || "days" },
+            relationshipFilter: { mode: s.relationshipFilterMode || "connected" }
+          };
+          await sendContentMessageWithInjection(tab.id, ACTION_RUN_KUDOS, runSettings);
+        }
+      } catch (_error) {}
+    } else {
+      await handleRun({
+        betweenTargets: { min: Math.round((s.minDelaySeconds || 1.7) * 1000), max: Math.round((s.maxDelaySeconds || 4.6) * 1000) },
+        dateRange: { mode: s.dateRangeMode || "any", value: s.dateRangeValue || 7, unit: s.dateRangeUnit || "days" },
+        relationshipFilter: { mode: s.relationshipFilterMode || "connected" }
+      });
+    }
+  }
+
+  async function handleAutoModeOff() {
+    await clearSchedule();
+  }
+
+  async function handleSettingsChanged(settings) {
+    await chromeStorageSet({ [SETTINGS_KEY]: settings });
+    if (settings.autoMode) {
+      await scheduleNextAlarm();
+    } else {
+      await clearSchedule();
+    }
+  }
+
+  async function handleRunComplete(metrics) {
+    await saveLastRun(metrics);
+    await releaseRunTab(null);
+
+    const autoMode = await getAutoMode();
+    if (autoMode) {
+      await scheduleNextAlarm();
+    }
+  }
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    handleAlarm(alarm).catch(() => {});
   });
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (!message || !message.action) return false;
+
+    if (message.action === ACTION_STATUS_KUDOS) {
+      handleStatus().then(sendResponse).catch((error) => sendResponse({ ok: false, message: error.message, state: null }));
+      return true;
+    }
+
+    if (message.action === ACTION_RUN_KUDOS) {
+      handleRun(message.settings).then(sendResponse).catch((error) => sendResponse({ ok: false, message: error.message, state: null }));
+      return true;
+    }
+
+    if (message.action === ACTION_STOP_KUDOS) {
+      handleStop().then(sendResponse).catch((error) => sendResponse({ ok: false, message: error.message, state: null }));
+      return true;
+    }
+
+    if (message.action === "STRAVA_AUTO_KUDOS_AUTO_MODE_ON") {
+      handleAutoModeOn(message.settings).catch(() => {});
+      return false;
+    }
+
+    if (message.action === "STRAVA_AUTO_KUDOS_AUTO_MODE_OFF") {
+      handleAutoModeOff().catch(() => {});
+      return false;
+    }
+
+    if (message.action === "STRAVA_AUTO_KUDOS_SETTINGS_CHANGED") {
+      handleSettingsChanged(message.settings).catch(() => {});
+      return false;
+    }
+
+    if (message.action === "STRAVA_AUTO_KUDOS_RUN_COMPLETE") {
+      handleRunComplete(message.metrics).catch(() => {});
+      return false;
+    }
+
+    return false;
+  });
+
+  // Initialize: restore auto-mode scheduling on service worker start
+  (async function init() {
+    const settings = await loadSettings();
+    if (settings.autoMode) {
+      await scheduleNextAlarm();
+    }
+  })().catch(() => {});
 })();

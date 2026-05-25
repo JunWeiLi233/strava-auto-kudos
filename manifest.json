@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Strava Auto Kudos",
-  "version": "1.0.13",
-  "description": "Clicks unselected Strava kudos buttons from the active dashboard feed.",
+  "version": "2.0.0",
+  "description": "Automatically gives kudos on Strava based on your filters. Zero-interaction after setup.",
   "homepage_url": "https://github.com/JunWeiLi233/strava-auto-kudos",
   "permissions": [
     "activeTab",
+    "alarms",
     "scripting",
     "storage"
   ],

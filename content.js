@@ -736,7 +736,7 @@
       hiddenDiscoveryBackoffs: 0, hiddenSince: null,
       delayRangeMs: betweenTargets, dateRange, relationshipFilter: null,
       startedAt: Date.now(), finishedAt: null, durationMs: null,
-      isAutoMode: runState.isAutoMode
+      isAutoMode: runState.isAutoMode, shouldAutoRefresh: false
     };
   }
 
@@ -874,13 +874,21 @@
         if (candidateResult.sawCandidate || candidateResult.skippedCached > 0) pageTouchedFeed = true;
 
         if (buttons.length === 0) {
-          if (hasRecentActivityBoundary()) { markRecentActivityBoundary(metrics); break; }
+          if (hasRecentActivityBoundary()) {
+            markRecentActivityBoundary(metrics);
+            metrics.shouldAutoRefresh = runState.isAutoMode;
+            break;
+          }
           if (pageTouchedFeed) setCurrentStatus(metrics, "runStatusBatchComplete", "Loaded batch is complete; scrolling for more activities.");
           setCurrentStatus(metrics, "runStatusScrolling", "Scrolling the dashboard to let Strava load more activities.");
           metrics.discoveryScrolls += 1;
           const madeProgress = await scrollForMoreFeedItems();
           if (runState.cancelRequested) break;
-          if (hasRecentActivityBoundary()) { markRecentActivityBoundary(metrics); break; }
+          if (hasRecentActivityBoundary()) {
+            markRecentActivityBoundary(metrics);
+            metrics.shouldAutoRefresh = runState.isAutoMode;
+            break;
+          }
           if (madeProgress) { idleScrollAttempts = 0; metrics.idleDiscoveryAttempts = 0; setCurrentStatus(metrics, "runStatusMoreLoaded", "More feed content loaded; scanning again."); continue; }
           if (isPageHidden()) { setCurrentStatus(metrics, "runStatusHiddenWaiting", "Strava tab is hidden; waiting before the next discovery scroll."); if (!(await hiddenDiscoveryBackoff(metrics))) break; continue; }
           idleScrollAttempts += 1;
@@ -900,7 +908,10 @@
 
         try {
           const processResult = await processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist);
-          if (processResult === "date-boundary") break;
+          if (processResult === "date-boundary") {
+            metrics.shouldAutoRefresh = runState.isAutoMode;
+            break;
+          }
         } catch (_error) { metrics.errors += 1; }
 
         if (runState.cancelRequested) break;
@@ -912,6 +923,12 @@
     } finally {
       if (handledCache) await persistHandledActivityCache(handledCache, metrics);
       finalizeRunMetrics(metrics);
+
+      if (metrics.shouldAutoRefresh && runState.isAutoMode) {
+        const delay = randomInteger(1500, 4000);
+        await sleep(delay);
+        window.location.reload();
+      }
     }
   }
 

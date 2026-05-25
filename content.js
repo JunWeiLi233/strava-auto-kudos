@@ -10,6 +10,9 @@
   const HANDLED_ACTIVITY_CACHE_KEY = "stravaAutoKudosHandledActivityCacheV1";
   const RESUME_RUN_KEY = "stravaAutoKudosResumeRunV1";
   const SETTINGS_KEY = "stravaAutoKudosSettingsV2";
+  const CONNECTION_WHITELIST_KEY = "stravaAutoKudosConnectionWhitelistV1";
+  const CONNECTION_WHITELIST_TTL_MS = 24 * 60 * 60 * 1000;
+  const CURRENT_USER_ID_KEY = "stravaAutoKudosCurrentUserId";
   const ALARM_NAME = "stravaAutoKudosAlarm";
   const TARGET_SELECTOR = 'button[data-testid="give_kudos_button"], button[data-testid="kudos_button"]';
   const TIMING_PROFILE = Object.freeze({
@@ -326,37 +329,127 @@
     return fallbackText ? `feed:${simpleHash(fallbackText)}` : "";
   }
 
-  function controlTextFor(element) { return normalizeDateText([element.getAttribute("aria-label"), element.getAttribute("title"), element.textContent].filter(Boolean).join(" ")); }
-
-  function entryHasFollowAction(entry) {
-    const controls = Array.from(entry.querySelectorAll('button, a, [role="button"]'));
-    return controls.some((control) => {
-      const text = controlTextFor(control).toLowerCase();
-      if (!text) return false;
-      if (/following|unfollow|subscribed|unsubscribe/.test(text)) return false;
-      if (/^follow(?:\s|$)|^subscribe(?:\s|$)/.test(text)) return true;
-      return /^(关注|關注)$/.test(text) || /加为关注|加為關注/.test(text);
-    });
-  }
-
-  function entryHasFollowerSignal(text) {
-    const lower = text.toLowerCase();
-    return /follows you|following you|subscribes to you|subscriber/.test(lower) || /关注了你|关注你|關注了你|關注你|追蹤了你|追蹤你/.test(text);
-  }
-
   function entryHasSuggestedOrPromotedSignal(text) {
     const lower = text.toLowerCase();
     return /suggested|recommended|people you may know|sponsored|promoted|advertisement/.test(lower) || /推荐|推薦|赞助|讚助|广告|廣告|推广|推廣|你可能认识|你可能認識/.test(text);
   }
 
-  function relationshipStatusForButton(button, relationshipFilter) {
+  function extractAthleteIdFromFeedEntry(entry) {
+    const links = entry.querySelectorAll("a[href*=\"/athletes/\"]");
+    for (const link of links) {
+      const href = link.getAttribute("href") || "";
+      const idx = href.indexOf("/athletes/");
+      if (idx === -1) continue;
+      const after = href.substring(idx + 10);
+      const end = after.search(/[/?]/);
+      const idStr = end === -1 ? after : after.substring(0, end);
+      if (/^\d+$/.test(idStr)) return idStr;
+    }
+    return "";
+  }
+
+  async function loadConnectionWhitelist() {
+    const raw = await storageLocalGet(CONNECTION_WHITELIST_KEY);
+    if (!raw || !raw.athleteIds || !Array.isArray(raw.athleteIds)) return null;
+    if (Date.now() - raw.updatedAt > CONNECTION_WHITELIST_TTL_MS) return null;
+    const athleteIds = new Set(raw.athleteIds.map(String));
+    return { athleteIds, updatedAt: raw.updatedAt, currentUserId: String(raw.currentUserId || "") };
+  }
+
+  function getCurrentUserId() {
+    const profileLinks = document.querySelectorAll("a[href*=\"/athletes/\"]");
+    for (const link of profileLinks) {
+      const text = (link.textContent || "").trim();
+      if (text && link.closest("nav, header, [class*=user], [class*=profile], [class*=nav]")) continue;
+      const href = link.getAttribute("href") || "";
+      const match = href.match(/\/athletes\/(\d+)$/);
+      if (match && text.length > 1) return match[1];
+    }
+    for (const link of profileLinks) {
+      const href = link.getAttribute("href") || "";
+      if (/\/athletes\/\d+$/.test(href)) {
+        return href.match(/\/athletes\/(\d+)/)[1];
+      }
+    }
+    return "";
+  }
+
+  async function fetchAthleteIdsFromPage(url) {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) return { ids: new Set(), hasMore: false };
+      const html = await resp.text();
+      const ids = new Set();
+      const re = /\/athletes\/(\d+)/g;
+      let match;
+      while ((match = re.exec(html)) !== null) {
+        ids.add(match[1]);
+      }
+      const perPage = 26;
+      const hasMore = ids.size >= perPage;
+      return { ids, hasMore };
+    } catch (_error) {
+      return { ids: new Set(), hasMore: false };
+    }
+  }
+
+  async function buildConnectionWhitelist(currentUserId) {
+    const allIds = new Set();
+    if (currentUserId) allIds.add(currentUserId);
+
+    try {
+      for (let page = 1; page <= 20; page += 1) {
+        const { ids: pageIds, hasMore } = await fetchAthleteIdsFromPage(`/athletes/${currentUserId}/follows?type=following&page=${page}`);
+        pageIds.forEach((id) => allIds.add(id));
+        if (!hasMore || pageIds.size === 0) break;
+      }
+    } catch (_error) {}
+
+    try {
+      for (let page = 1; page <= 20; page += 1) {
+        const { ids: pageIds, hasMore } = await fetchAthleteIdsFromPage(`/athletes/${currentUserId}/follows?type=followers&page=${page}`);
+        pageIds.forEach((id) => allIds.add(id));
+        if (!hasMore || pageIds.size === 0) break;
+      }
+    } catch (_error) {}
+
+    const whitelist = {
+      athleteIds: Array.from(allIds),
+      currentUserId: String(currentUserId),
+      updatedAt: Date.now()
+    };
+    await storageLocalSet({ [CONNECTION_WHITELIST_KEY]: whitelist });
+    return { athleteIds: allIds, currentUserId: String(currentUserId), updatedAt: whitelist.updatedAt };
+  }
+
+  async function getOrBuildConnectionWhitelist() {
+    const cached = await loadConnectionWhitelist();
+    if (cached) return cached;
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId) return null;
+    return buildConnectionWhitelist(currentUserId);
+  }
+
+  function relationshipStatusForButton(button, relationshipFilter, connectionWhitelist) {
     if (!relationshipFilter || relationshipFilter.mode === "any") return "include";
+
     const entry = feedEntryForButton(button);
     if (!entry) return "unknown";
+
     const text = normalizeDateText(entry.innerText || entry.textContent);
-    if (entryHasFollowerSignal(text)) return "include";
-    if (entryHasFollowAction(entry) || entryHasSuggestedOrPromotedSignal(text)) return "not-connected";
-    return "include";
+    if (entryHasSuggestedOrPromotedSignal(text)) return "not-connected";
+
+    const athleteId = extractAthleteIdFromFeedEntry(entry);
+    if (!athleteId) return "unknown";
+
+    if (connectionWhitelist && connectionWhitelist.athleteIds instanceof Set) {
+      return connectionWhitelist.athleteIds.has(athleteId) ? "include" : "not-connected";
+    }
+    if (connectionWhitelist && connectionWhitelist.athleteIds && Array.isArray(connectionWhitelist.athleteIds)) {
+      return connectionWhitelist.athleteIds.includes(athleteId) ? "include" : "not-connected";
+    }
+
+    return "unknown";
   }
 
   function createHandledActivityCache(entries) { return { entries, pendingWrites: 0 }; }
@@ -647,7 +740,7 @@
     };
   }
 
-  async function processButton(button, metrics, dateRange, handledCache, relationshipFilter) {
+  async function processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist) {
     if (runState.cancelRequested) return false;
     setCurrentStatus(metrics, "runStatusChecking", "Checking a visible kudos button.");
     const activityKey = activityKeyForButton(button);
@@ -655,7 +748,7 @@
     if (isDisabled(button)) { metrics.skippedDisabled += 1; return true; }
     if (isAlreadyClicked(button)) { metrics.skippedAlreadyClicked += 1; await markActivityHandled(handledCache, activityKey, metrics); return true; }
 
-    const relationshipStatus = relationshipStatusForButton(button, relationshipFilter);
+    const relationshipStatus = relationshipStatusForButton(button, relationshipFilter, connectionWhitelist);
     if (relationshipStatus !== "include") { metrics.skippedRelationship += 1; return true; }
 
     const dateFilterStatus = dateFilterStatusForButton(button, dateRange);
@@ -668,7 +761,7 @@
     if (isDisabled(button)) { metrics.skippedDisabled += 1; return true; }
     if (isAlreadyClicked(button)) { metrics.skippedAlreadyClicked += 1; await markActivityHandled(handledCache, activityKey, metrics); return true; }
 
-    const settledRelationshipStatus = relationshipStatusForButton(button, relationshipFilter);
+    const settledRelationshipStatus = relationshipStatusForButton(button, relationshipFilter, connectionWhitelist);
     if (settledRelationshipStatus !== "include") { metrics.skippedRelationship += 1; return true; }
 
     const settledDateFilterStatus = dateFilterStatusForButton(button, dateRange);
@@ -764,9 +857,16 @@
     let idleScrollAttempts = 0;
     let pageTouchedFeed = false;
     let handledCache = null;
+    let connectionWhitelist = null;
 
     try {
       handledCache = await loadHandledActivityCache(metrics);
+      if (relationshipFilter && relationshipFilter.mode === "connected") {
+        connectionWhitelist = await getOrBuildConnectionWhitelist();
+        if (!connectionWhitelist) {
+          setCurrentStatus(metrics, "runStatusStarting", "Could not build connection whitelist; skipping relationship filter.");
+        }
+      }
 
       while (!runState.cancelRequested) {
         const candidateResult = getUnprocessedCandidateButtons(processedButtons, handledCache, metrics);
@@ -799,7 +899,7 @@
         if (runState.cancelRequested) break;
 
         try {
-          const processResult = await processButton(button, metrics, dateRange, handledCache, relationshipFilter);
+          const processResult = await processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist);
           if (processResult === "date-boundary") break;
         } catch (_error) { metrics.errors += 1; }
 

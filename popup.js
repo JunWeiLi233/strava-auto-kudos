@@ -487,7 +487,8 @@
       return;
     }
     if (isRunning) {
-      setStatusDescriptor(runningStatusDescriptor(state.metrics), "ready");
+      const metrics = state.metrics;
+      setStatusDescriptor(runningStatusDescriptor(metrics), "busy");
       return;
     }
     if (!quiet) {
@@ -529,7 +530,8 @@
       await applyStatusResponse(response, true);
       const state = response && response.state ? response.state : {};
       if (response && (response.ok || state.running)) {
-        setStatusDescriptor(runningStatusDescriptor(state.metrics || {}), "ready");
+        const metrics = state.metrics || {};
+        setStatusDescriptor(runningStatusDescriptor(metrics), "busy");
       } else {
         setStatusDescriptor(resultStatusDescriptor(response), "ready");
       }

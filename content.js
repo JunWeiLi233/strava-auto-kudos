@@ -927,7 +927,6 @@
       if (metrics.shouldAutoRefresh && runState.isAutoMode) {
         const delay = randomInteger(1500, 4000);
         await sleep(delay);
-        window.location.reload();
       }
     }
   }

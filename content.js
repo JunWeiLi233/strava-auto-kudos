@@ -809,6 +809,7 @@
     restored.autoRefreshPending = false;
     restored.resumedAfterRefresh = true;
     restored.resumeCount = Number(restored.resumeCount || 0) + 1;
+    restored.refreshes = Number(restored.refreshes || 0) + 1;
     restored.finishedAt = null;
     restored.durationMs = null;
     restored.isAutoMode = runState.isAutoMode;
@@ -848,9 +849,30 @@
 
     if (!metrics.autoRefreshPending) {
       await clearStoredResumeRun();
+      await notifyBackgroundRunComplete(metrics);
     }
+  }
 
-    await notifyBackgroundRunComplete(metrics);
+  async function requestAutoRefresh(settings, metrics) {
+    metrics.autoRefreshPending = true;
+    metrics.currentStatusKey = null;
+    metrics.currentStatus = "Refreshing Strava before continuing.";
+    const stored = await storageLocalSet({
+      [RESUME_RUN_KEY]: {
+        pending: true,
+        requestedAt: Date.now(),
+        settings,
+        metrics
+      }
+    });
+    if (!stored) {
+      metrics.autoRefreshPending = false;
+      metrics.currentStatusKey = null;
+      metrics.currentStatus = "Unable to save refresh state.";
+      return false;
+    }
+    window.location.reload();
+    return true;
   }
 
   async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter) {
@@ -922,11 +944,22 @@
       metrics.errorMessage = error && error.message ? error.message : "Kudos sequence failed.";
     } finally {
       if (handledCache) await persistHandledActivityCache(handledCache, metrics);
-      finalizeRunMetrics(metrics);
+      const willAutoRefresh = metrics.shouldAutoRefresh && runState.isAutoMode;
+      if (willAutoRefresh) metrics.autoRefreshPending = true;
+      await finalizeRunMetrics(metrics);
 
-      if (metrics.shouldAutoRefresh && runState.isAutoMode) {
+      if (willAutoRefresh) {
         const delay = randomInteger(1500, 4000);
         await sleep(delay);
+        const refreshed = await requestAutoRefresh({
+          betweenTargets: metrics.delayRangeMs,
+          dateRange,
+          relationshipFilter
+        }, metrics);
+        if (!refreshed) {
+          await clearStoredResumeRun();
+          await notifyBackgroundRunComplete(metrics);
+        }
       }
     }
   }

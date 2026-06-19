@@ -7,11 +7,17 @@ const root = path.resolve(__dirname, "..");
 const contentSource = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const popupSource = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 
-test("dashboard discovery does not stop after repeated no-new-work refreshes", () => {
+test("auto refresh persists resume state and reloads the dashboard", () => {
   assert.equal(contentSource.includes("maxNoNewWorkRefreshes"), false);
   assert.equal(contentSource.includes("refreshesWithoutNewWork"), false);
   assert.equal(contentSource.includes("maxProcessedButtons"), false);
-  assert.equal(contentSource.includes("window.location.reload"), false);
+  assert.match(contentSource, /requestAutoRefresh/);
+  assert.match(contentSource, /autoRefreshPending\s*=\s*true/);
+  assert.match(contentSource, /\[RESUME_RUN_KEY\]/);
+  assert.match(contentSource, /pending:\s*true/);
+  assert.match(contentSource, /requestedAt:\s*Date\.now\(\)/);
+  assert.match(contentSource, /window\.location\.reload\(\)/);
+  assert.match(contentSource, /if \(willAutoRefresh\) metrics\.autoRefreshPending = true;\s*await finalizeRunMetrics\(metrics\);/);
 });
 
 test("date filter boundary ends the active run instead of being treated as a normal skip", () => {

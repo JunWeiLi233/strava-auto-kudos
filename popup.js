@@ -23,6 +23,7 @@
   const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
   const RELATIONSHIP_FILTER_MODES = Object.freeze(["connected", "any"]);
   const DATE_RANGE_LIMITS = Object.freeze({ days: 3650, months: 120, years: 10 });
+  const STATUS_POLL_INTERVAL_MS = 1200;
 
   const TRANSLATIONS = Object.freeze({
     en: {
@@ -189,6 +190,7 @@
   const lastRunEl = document.getElementById("lastRun");
   let currentLanguage = loadLanguage();
   let lastStatus = { key: "readyStatus", params: {}, state: "ready" };
+  let refreshStatusInFlight = false;
 
   function loadLanguage() {
     try {
@@ -504,11 +506,15 @@
   }
 
   async function refreshStatus() {
+    if (refreshStatusInFlight) return;
+    refreshStatusInFlight = true;
     try {
       const response = await sendRuntimeAction(ACTION_STATUS_KUDOS);
       await applyStatusResponse(response, true);
     } catch (_error) {
       setRunningControls(false, false);
+    } finally {
+      refreshStatusInFlight = false;
     }
   }
 
@@ -609,4 +615,5 @@
   applyLanguage();
   applySettingsToUI();
   refreshStatus();
+  setInterval(refreshStatus, STATUS_POLL_INTERVAL_MS);
 })();

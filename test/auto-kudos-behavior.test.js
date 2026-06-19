@@ -40,3 +40,9 @@ test("popup renders detailed live progress instead of a generic working status",
   assert.match(popupSource, /currentStatusKey/);
   assert.match(popupSource, /setStatusDescriptor\(runningStatusDescriptor\(metrics\), "busy"\)/);
 });
+
+test("popup polls status while it remains open", () => {
+  assert.match(popupSource, /STATUS_POLL_INTERVAL_MS/);
+  assert.match(popupSource, /setInterval\(refreshStatus,\s*STATUS_POLL_INTERVAL_MS\)/);
+  assert.match(popupSource, /refreshStatusInFlight/);
+});

@@ -34,6 +34,13 @@ test("legacy kudos selector excludes athlete-name kudos inspector buttons", () =
   assert.match(contentSource, /!isKudosInspectorButton\(button\)/);
 });
 
+test("legacy kudos selector excludes kudos comments modal triggers", () => {
+  assert.match(contentSource, /kudos-comments-modal-title/);
+  assert.match(contentSource, /aria-controls/);
+  assert.match(contentSource, /aria-labelledby/);
+  assert.match(contentSource, /aria-haspopup/);
+});
+
 test("popup renders detailed live progress instead of a generic working status", () => {
   assert.match(popupSource, /runningProgressStatus/);
   assert.match(popupSource, /runningStatusDescriptor/);

@@ -164,6 +164,12 @@
     if (button.getAttribute("data-testid") !== "kudos_button") return false;
     const label = labelText(button).toLowerCase();
     if (isSummaryKudosButton(button)) return true;
+    const modalTarget = [
+      button.getAttribute("aria-controls"),
+      button.getAttribute("aria-describedby"),
+      button.getAttribute("aria-labelledby")
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (button.getAttribute("aria-haspopup") || modalTarget.includes("kudos-comments-modal-title")) return true;
     if (/gave kudos|who gave kudos|kudos from|and \d+ others?|^\d+\s+kudos?$/.test(label)) return true;
 
     const visibleText = (button.innerText || button.textContent || "").trim();

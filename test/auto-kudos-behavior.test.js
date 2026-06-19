@@ -27,6 +27,13 @@ test("date filter boundary ends the active run instead of being treated as a nor
   assert.match(contentSource, /processResult === "date-boundary"[\s\S]*break/);
 });
 
+test("legacy kudos selector excludes athlete-name kudos inspector buttons", () => {
+  assert.match(contentSource, /function isKudosInspectorButton/);
+  assert.match(contentSource, /gave kudos/);
+  assert.match(contentSource, /\bSmvoy\b/);
+  assert.match(contentSource, /!isKudosInspectorButton\(button\)/);
+});
+
 test("popup renders detailed live progress instead of a generic working status", () => {
   assert.match(popupSource, /runningProgressStatus/);
   assert.match(popupSource, /runningStatusDescriptor/);

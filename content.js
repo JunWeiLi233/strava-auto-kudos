@@ -160,6 +160,18 @@
     return /view all|see all|all kudos/.test(label) || /查看所有赞|查看全部赞|查看所有讚|查看全部讚/.test(label);
   }
 
+  function isKudosInspectorButton(button) {
+    if (button.getAttribute("data-testid") !== "kudos_button") return false;
+    const label = labelText(button).toLowerCase();
+    if (isSummaryKudosButton(button)) return true;
+    if (/gave kudos|who gave kudos|kudos from|and \d+ others?|^\d+\s+kudos?$/.test(label)) return true;
+
+    const visibleText = (button.innerText || button.textContent || "").trim();
+    const hasActionIntent = /\bgive\b|\bremove\b|\bundo\b|\bkudoed\b|you gave|kudos|取消|撤销|點讚|点赞|赞|讚/.test(label);
+    // Strava can render this inspector as a button labelled with the first athlete, e.g. "Smvoy".
+    return Boolean(visibleText && !hasActionIntent);
+  }
+
   function parseRgb(color) {
     const match = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(color || "");
     if (!match) return null;
@@ -685,7 +697,7 @@
 
   function getCandidateButtons() {
     return Array.from(document.querySelectorAll(TARGET_SELECTOR)).filter((button) => {
-      return isButtonElement(button) && !isDisabled(button) && !isSummaryKudosButton(button);
+      return isButtonElement(button) && !isDisabled(button) && !isKudosInspectorButton(button);
     });
   }
 

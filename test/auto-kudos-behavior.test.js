@@ -21,6 +21,13 @@ test("auto refresh persists resume state and reloads after idle discovery limit"
   assert.match(contentSource, /if \(willAutoRefresh\) metrics\.autoRefreshPending = true;\s*await finalizeRunMetrics\(metrics\);/);
 });
 
+test("background-started auto runs tell the content script to allow refresh resume", () => {
+  const backgroundSource = fs.readFileSync(path.join(root, "background.js"), "utf8");
+  assert.match(contentSource, /runState\.isAutoMode\s*=\s*Boolean\(settings && settings\.autoMode\)/);
+  assert.match(backgroundSource, /autoMode:\s*true/);
+  assert.match(popupSource, /autoMode:\s*Boolean\(s\.autoMode\)/);
+});
+
 test("date filter boundary ends the active run instead of being treated as a normal skip", () => {
   assert.match(contentSource, /endedAtDateBoundary/);
   assert.match(contentSource, /markDateRangeBoundary/);

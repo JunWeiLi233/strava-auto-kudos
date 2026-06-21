@@ -995,6 +995,7 @@
 
     runState.running = true;
     runState.cancelRequested = false;
+    runState.isAutoMode = Boolean(settings && settings.autoMode);
 
     const login = detectLoginState();
     if (!login.loggedIn) {
@@ -1051,7 +1052,8 @@
         },
         relationshipFilter: {
           mode: settings.relationshipFilterMode || "connected"
-        }
+        },
+        autoMode: true
       };
     } catch (_error) { return null; }
   }
@@ -1074,7 +1076,6 @@
     const settings = await loadAutoModeSettings();
     if (!settings) return;
 
-    runState.isAutoMode = true;
     startKudosSequence(settings);
   }
 

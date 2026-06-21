@@ -335,7 +335,8 @@
         },
         relationshipFilter: {
           mode: settings.relationshipFilterMode || "connected"
-        }
+        },
+        autoMode: true
       });
     } catch (_error) {}
   }
@@ -353,7 +354,8 @@
           const runSettings = {
             betweenTargets: { min: Math.round((s.minDelaySeconds || 1.7) * 1000), max: Math.round((s.maxDelaySeconds || 4.6) * 1000) },
             dateRange: { mode: s.dateRangeMode || "any", value: s.dateRangeValue || 7, unit: s.dateRangeUnit || "days" },
-            relationshipFilter: { mode: s.relationshipFilterMode || "connected" }
+            relationshipFilter: { mode: s.relationshipFilterMode || "connected" },
+            autoMode: true
           };
           await sendContentMessageWithInjection(tab.id, ACTION_RUN_KUDOS, runSettings);
         }
@@ -362,7 +364,8 @@
       await handleRun({
         betweenTargets: { min: Math.round((s.minDelaySeconds || 1.7) * 1000), max: Math.round((s.maxDelaySeconds || 4.6) * 1000) },
         dateRange: { mode: s.dateRangeMode || "any", value: s.dateRangeValue || 7, unit: s.dateRangeUnit || "days" },
-        relationshipFilter: { mode: s.relationshipFilterMode || "connected" }
+        relationshipFilter: { mode: s.relationshipFilterMode || "connected" },
+        autoMode: true
       });
     }
   }

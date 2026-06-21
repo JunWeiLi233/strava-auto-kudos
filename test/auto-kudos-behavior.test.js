@@ -76,6 +76,15 @@ test("legacy kudos selector excludes kudos comments modal triggers", () => {
   assert.match(contentSource, /aria-haspopup/);
 });
 
+test("legacy kudos selector excludes kudos detail and presentation navigation controls", () => {
+  assert.match(contentSource, /isKudosDetailNavigationButton/);
+  assert.match(contentSource, /presentation/);
+  assert.match(contentSource, /detail/);
+  assert.match(contentSource, /\\u67e5\\u770b/);
+  assert.match(contentSource, /\\u70b9\\u8d5e/);
+  assert.match(contentSource, /isKudosDetailNavigationButton\(button\)/);
+});
+
 test("popup renders detailed live progress instead of a generic working status", () => {
   assert.match(popupSource, /runningProgressStatus/);
   assert.match(popupSource, /runningStatusDescriptor/);

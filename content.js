@@ -173,13 +173,30 @@
   function isSummaryKudosButton(button) {
     if (button.getAttribute("data-testid") !== "kudos_button") return false;
     const label = labelText(button).toLowerCase();
-    return /view all|see all|all kudos/.test(label) || /查看所有赞|查看全部赞|查看所有讚|查看全部讚/.test(label);
+    return /view all|see all|all kudos/.test(label) || /\u67e5\u770b.*[\u70b9\u8d5e\u8b9a\u讚]|[\u70b9\u8d5e\u8b9a\u讚].*\u8be6\u60c5/.test(label);
+  }
+
+  function isKudosDetailNavigationButton(button) {
+    if (button.getAttribute("data-testid") !== "kudos_button") return false;
+    const label = labelText(button).toLowerCase();
+    const navigationTarget = [
+      button.getAttribute("href"),
+      button.getAttribute("data-url"),
+      button.getAttribute("data-href"),
+      button.getAttribute("data-target"),
+      button.closest("a") && (button.closest("a").getAttribute("href") || button.closest("a").href)
+    ].filter(Boolean).join(" ").toLowerCase();
+    if (/presentation|detail|kudos|\/activities\/\d+/.test(navigationTarget)) return true;
+    if (/presentation|detail|\bview\b.*\bkudos\b|\bkudos\b.*\bdetail\b/.test(label)) return true;
+    if (/\u67e5\u770b.*[\u70b9\u8d5e\u8b9a\u讚]|[\u70b9\u8d5e\u8b9a\u讚].*\u8be6\u60c5|^\d+\s*[\u70b9\u8d5e\u8b9a\u讚]/.test(label)) return true;
+    return false;
   }
 
   function isKudosInspectorButton(button) {
     if (button.getAttribute("data-testid") !== "kudos_button") return false;
     const label = labelText(button).toLowerCase();
     if (isSummaryKudosButton(button)) return true;
+    if (isKudosDetailNavigationButton(button)) return true;
     const modalTarget = [
       button.getAttribute("aria-controls"),
       button.getAttribute("aria-describedby"),

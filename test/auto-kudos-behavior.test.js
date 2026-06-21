@@ -6,6 +6,7 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const contentSource = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const popupSource = fs.readFileSync(path.join(root, "popup.js"), "utf8");
+const backgroundSource = fs.readFileSync(path.join(root, "background.js"), "utf8");
 
 test("auto refresh persists resume state and reloads after idle discovery limit", () => {
   assert.match(contentSource, /MAX_IDLE_DISCOVERY_ATTEMPTS/);
@@ -24,7 +25,6 @@ test("auto refresh persists resume state and reloads after idle discovery limit"
 });
 
 test("background and popup started runs tell the content script to allow refresh resume", () => {
-  const backgroundSource = fs.readFileSync(path.join(root, "background.js"), "utf8");
   assert.match(contentSource, /runState\.isAutoMode\s*=\s*Boolean\(settings && settings\.autoMode\)/);
   assert.match(backgroundSource, /autoMode:\s*true/);
   assert.match(popupSource, /autoMode:\s*true/);
@@ -32,7 +32,6 @@ test("background and popup started runs tell the content script to allow refresh
 
 test("popup and background propagate race PR compliment mode", () => {
   const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
-  const backgroundSource = fs.readFileSync(path.join(root, "background.js"), "utf8");
   assert.match(popupHtml, /complimentModeSelect/);
   assert.match(popupHtml, /value="race-pr"/);
   assert.match(popupSource, /complimentMode:\s*"off"/);
@@ -40,6 +39,18 @@ test("popup and background propagate race PR compliment mode", () => {
   assert.match(popupSource, /complimentMode:\s*s\.complimentMode/);
   assert.match(backgroundSource, /complimentMode:\s*s\.complimentMode \|\| "off"/);
   assert.match(backgroundSource, /complimentMode:\s*settings\.complimentMode \|\| "off"/);
+});
+
+test("auto mode backs off after empty runs and resets after activity", () => {
+  assert.match(backgroundSource, /AUTO_BACKOFF_KEY/);
+  assert.match(backgroundSource, /AUTO_BACKOFF_MINUTES/);
+  assert.match(backgroundSource, /\[60,\s*120,\s*240,\s*480\]/);
+  assert.match(backgroundSource, /scheduleNextAlarm\(backoff\.delayMinutes\)/);
+  assert.match(backgroundSource, /periodInMinutes/);
+  assert.match(backgroundSource, /delayInMinutes/);
+  assert.match(backgroundSource, /runHadUsefulActivity/);
+  assert.match(backgroundSource, /recordEmptyAutoRunBackoff/);
+  assert.match(backgroundSource, /resetAutoBackoff/);
 });
 
 test("race PR compliments use detection gates, cache, and metrics", () => {

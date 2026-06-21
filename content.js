@@ -1012,6 +1012,7 @@
           stopped: metrics.stopped,
           endedAtRecentActivityBoundary: metrics.endedAtRecentActivityBoundary,
           endedAtDateBoundary: metrics.endedAtDateBoundary,
+          cachedActivitiesAdded: metrics.cachedActivitiesAdded,
           finishedAt: metrics.finishedAt,
           durationMs: metrics.durationMs,
           commentsPosted: metrics.commentsPosted,

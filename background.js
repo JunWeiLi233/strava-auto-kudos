@@ -7,6 +7,8 @@
   const SETTINGS_KEY = "stravaAutoKudosSettingsV2";
   const LAST_RUN_KEY = "stravaAutoKudosLastRun";
   const ACTIVE_RUN_TAB_KEY = "activeRunTabId";
+  const AUTO_BACKOFF_KEY = "stravaAutoKudosAutoBackoffV1";
+  const AUTO_BACKOFF_MINUTES = Object.freeze([60, 120, 240, 480]);
   const ALARM_NAME = "stravaAutoKudosAlarm";
   const STRAVA_HOST = "www.strava.com";
   const STRAVA_URL_PATTERN = "https://www.strava.com/*";
@@ -174,6 +176,7 @@
         stopped: Boolean(metrics.stopped),
         endedAtRecentActivityBoundary: Boolean(metrics.endedAtRecentActivityBoundary),
         endedAtDateBoundary: Boolean(metrics.endedAtDateBoundary),
+        cachedActivitiesAdded: Number(metrics.cachedActivitiesAdded || 0),
         commentsPosted: Number(metrics.commentsPosted || 0),
         commentsSkipped: Number(metrics.commentsSkipped || 0),
         commentErrors: Number(metrics.commentErrors || 0)
@@ -292,11 +295,46 @@
     return { ...(response || idleStatus()), tabId: tab.id };
   }
 
-  async function scheduleNextAlarm() {
+  async function loadAutoBackoff() {
+    const stored = await chromeStorageGet(AUTO_BACKOFF_KEY);
+    return stored && typeof stored === "object" ? stored : {};
+  }
+
+  async function resetAutoBackoff() {
+    await chromeStorageRemove(AUTO_BACKOFF_KEY);
+  }
+
+  async function recordEmptyAutoRunBackoff() {
+    const current = await loadAutoBackoff();
+    const emptyRunCount = Math.min(Number(current.emptyRunCount || 0) + 1, AUTO_BACKOFF_MINUTES.length);
+    const delayMinutes = AUTO_BACKOFF_MINUTES[Math.min(emptyRunCount - 1, AUTO_BACKOFF_MINUTES.length - 1)];
+    const now = Date.now();
+    const backoff = {
+      emptyRunCount,
+      delayMinutes,
+      updatedAt: now,
+      nextRunAt: now + delayMinutes * 60 * 1000
+    };
+    await chromeStorageSet({ [AUTO_BACKOFF_KEY]: backoff });
+    return backoff;
+  }
+
+  function runHadUsefulActivity(metrics) {
+    return Number(metrics.clicked || 0) > 0 ||
+      Number(metrics.commentsPosted || 0) > 0 ||
+      Number(metrics.cachedActivitiesAdded || 0) > 0;
+  }
+
+  async function scheduleNextAlarm(delayMinutes) {
     const settings = await loadSettings();
     if (!settings.autoMode) return;
 
     const intervalMinutes = Number(settings.scheduleIntervalMinutes) || 30;
+    await clearSchedule();
+    if (Number(delayMinutes) > 0) {
+      chrome.alarms.create(ALARM_NAME, { delayInMinutes: Number(delayMinutes) });
+      return;
+    }
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: intervalMinutes });
   }
 
@@ -348,6 +386,7 @@
   async function handleAutoModeOn(settings) {
     const s = settings || await loadSettings();
     await chromeStorageSet({ [SETTINGS_KEY]: s });
+    await resetAutoBackoff();
     await scheduleNextAlarm();
 
     const tab = await firstStravaTab();
@@ -377,14 +416,17 @@
   }
 
   async function handleAutoModeOff() {
+    await resetAutoBackoff();
     await clearSchedule();
   }
 
   async function handleSettingsChanged(settings) {
     await chromeStorageSet({ [SETTINGS_KEY]: settings });
     if (settings.autoMode) {
+      await resetAutoBackoff();
       await scheduleNextAlarm();
     } else {
+      await resetAutoBackoff();
       await clearSchedule();
     }
   }
@@ -395,7 +437,13 @@
 
     const autoMode = await getAutoMode();
     if (autoMode) {
-      await scheduleNextAlarm();
+      if (runHadUsefulActivity(metrics)) {
+        await resetAutoBackoff();
+        await scheduleNextAlarm();
+      } else {
+        const backoff = await recordEmptyAutoRunBackoff();
+        await scheduleNextAlarm(backoff.delayMinutes);
+      }
     }
   }
 

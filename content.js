@@ -834,8 +834,16 @@
     });
   }
 
-  function getUnprocessedCandidateButtons(processedButtons, handledCache, metrics) {
+  function shouldInspectCachedActivityForCompliment(button, activityKey, complimentMode, commentCache) {
+    if (!complimentMode || complimentMode.mode !== "race-pr") return false;
+    if (!activityKey || !activityKey.startsWith("activity:")) return false;
+    if (commentCache && commentCache.entries.has(activityKey)) return false;
+    return entryLooksLikeRacePr(feedEntryTextForButton(button));
+  }
+
+  function getUnprocessedCandidateButtons(processedButtons, handledCache, metrics, complimentMode, commentCache) {
     const buttons = [];
+    const commentOnlyButtons = [];
     let sawCandidate = false;
     let skippedCached = 0;
     getCandidateButtons().forEach((button) => {
@@ -844,13 +852,16 @@
       const activityKey = activityKeyForButton(button);
       if (activityKey && handledCache && handledCache.entries.has(activityKey)) {
         processedButtons.add(button);
+        if (shouldInspectCachedActivityForCompliment(button, activityKey, complimentMode, commentCache)) {
+          commentOnlyButtons.push(button);
+        }
         skippedCached += 1;
         return;
       }
       buttons.push(button);
     });
     if (skippedCached > 0) metrics.skippedCached += skippedCached;
-    return { buttons, sawCandidate, skippedCached };
+    return { buttons, commentOnlyButtons, sawCandidate, skippedCached };
   }
 
   function isLoginPage() {
@@ -928,6 +939,20 @@
     metrics.clicked += 1;
     setCurrentStatus(metrics, "runStatusClicked", "Clicked a kudos button.");
     await markActivityHandled(handledCache, activityKey, metrics);
+    await maybePostRacePrCompliment(button, metrics, complimentMode, commentCache, activityKey);
+    return true;
+  }
+
+  async function processCommentOnlyButton(button, metrics, dateRange, relationshipFilter, connectionWhitelist, complimentMode, commentCache) {
+    if (runState.cancelRequested) return false;
+    const activityKey = activityKeyForButton(button);
+    const relationshipStatus = relationshipStatusForButton(button, relationshipFilter, connectionWhitelist);
+    if (relationshipStatus !== "include") { metrics.skippedRelationship += 1; return true; }
+
+    const dateFilterStatus = dateFilterStatusForButton(button, dateRange);
+    if (dateFilterStatus === "out-of-date") { metrics.skippedOutOfDate += 1; return true; }
+    if (dateFilterStatus === "unknown") { metrics.skippedUnknownDate += 1; return true; }
+
     await maybePostRacePrCompliment(button, metrics, complimentMode, commentCache, activityKey);
     return true;
   }
@@ -1088,9 +1113,23 @@
       }
 
       while (!runState.cancelRequested) {
-        const candidateResult = getUnprocessedCandidateButtons(processedButtons, handledCache, metrics);
+        const candidateResult = getUnprocessedCandidateButtons(processedButtons, handledCache, metrics, complimentMode, commentCache);
         const buttons = candidateResult.buttons;
+        const commentOnlyButtons = candidateResult.commentOnlyButtons;
         if (candidateResult.sawCandidate || candidateResult.skippedCached > 0) pageTouchedFeed = true;
+
+        if (buttons.length === 0 && commentOnlyButtons.length > 0) {
+          idleScrollAttempts = 0;
+          metrics.idleDiscoveryAttempts = 0;
+          const commentOnlyButton = commentOnlyButtons[0];
+          metrics.scanned += 1;
+          pageTouchedFeed = true;
+          try {
+            await processCommentOnlyButton(commentOnlyButton, metrics, dateRange, relationshipFilter, connectionWhitelist, complimentMode, commentCache);
+          } catch (_error) { metrics.errors += 1; }
+          if (runState.cancelRequested) break;
+          continue;
+        }
 
         if (buttons.length === 0) {
           if (hasRecentActivityBoundary()) {

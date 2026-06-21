@@ -55,6 +55,13 @@ test("race PR compliments use detection gates, cache, and metrics", () => {
   assert.match(contentSource, /markActivityCommented/);
 });
 
+test("race PR compliments still inspect activities already handled by the kudos cache", () => {
+  assert.match(contentSource, /commentOnlyButtons/);
+  assert.match(contentSource, /shouldInspectCachedActivityForCompliment/);
+  assert.match(contentSource, /candidateResult\.commentOnlyButtons/);
+  assert.match(contentSource, /processCommentOnlyButton/);
+});
+
 test("date filter boundary ends the active run instead of being treated as a normal skip", () => {
   assert.match(contentSource, /endedAtDateBoundary/);
   assert.match(contentSource, /markDateRangeBoundary/);

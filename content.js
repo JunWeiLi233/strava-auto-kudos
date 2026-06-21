@@ -8,6 +8,7 @@
   const ACTION_STOP_KUDOS = "STRAVA_AUTO_KUDOS_STOP";
   const ACTION_STATUS_KUDOS = "STRAVA_AUTO_KUDOS_STATUS";
   const HANDLED_ACTIVITY_CACHE_KEY = "stravaAutoKudosHandledActivityCacheV1";
+  const COMMENT_CACHE_KEY = "stravaAutoKudosCommentCacheV1";
   const RESUME_RUN_KEY = "stravaAutoKudosResumeRunV1";
   const SETTINGS_KEY = "stravaAutoKudosSettingsV2";
   const CONNECTION_WHITELIST_KEY = "stravaAutoKudosConnectionWhitelistV1";
@@ -32,7 +33,15 @@
   const USER_DELAY_LIMIT_MS = Object.freeze({ min: 800, max: 120000 });
   const DEFAULT_DATE_RANGE = Object.freeze({ value: 7, unit: "days" });
   const DEFAULT_RELATIONSHIP_FILTER = Object.freeze({ mode: "connected" });
+  const DEFAULT_COMPLIMENT_MODE = "off";
   const RELATIONSHIP_FILTER_MODES = Object.freeze(["connected", "any"]);
+  const COMPLIMENT_MODES = Object.freeze(["off", "race-pr"]);
+  const COMPLIMENT_MESSAGES = Object.freeze([
+    "Huge PR. Congrats!",
+    "Strong race, well earned PR.",
+    "That PR is solid. Nice work!",
+    "Big result. Congrats on the PR!"
+  ]);
   const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
   const DATE_RANGE_LIMITS = Object.freeze({ days: 3650, months: 120, years: 10 });
   const BACKGROUND_DISCOVERY_PROFILE = Object.freeze({ hiddenDiscoveryBackoff: { min: 2500, max: 5500 } });
@@ -139,6 +148,11 @@
   function normalizeRelationshipFilter(settings) {
     const filter = settings && settings.relationshipFilter ? settings.relationshipFilter : null;
     const mode = filter && RELATIONSHIP_FILTER_MODES.includes(filter.mode) ? filter.mode : DEFAULT_RELATIONSHIP_FILTER.mode;
+    return { mode };
+  }
+
+  function normalizeComplimentMode(settings) {
+    const mode = settings && COMPLIMENT_MODES.includes(settings.complimentMode) ? settings.complimentMode : DEFAULT_COMPLIMENT_MODE;
     return { mode };
   }
 
@@ -309,6 +323,20 @@
   }
 
   function feedEntryForButton(button) { return button.closest('[data-testid="web-feed-entry"], article, [class*="feed-entry"]'); }
+
+  function feedEntryTextForButton(button) {
+    const entry = feedEntryForButton(button);
+    return normalizeDateText(entry ? (entry.innerText || entry.textContent || "") : "");
+  }
+
+  function entryLooksLikeRacePr(text) {
+    const normalized = normalizeDateText(text);
+    if (!normalized) return false;
+    const lower = normalized.toLowerCase();
+    const hasRaceSignal = /\brace\b|\bmarathon\b|\bhalf marathon\b|\b\d{1,2}\s?k\b|\btrail race\b|\bultra\b|\btriathlon\b/.test(lower) || /比赛|賽事|马拉松|馬拉松|半马|半馬|越野赛|越野賽/.test(normalized);
+    const hasPrSignal = /\bpr\b|\bpersonal record\b|\bbest effort\b|\bachievement\b|\bmedal\b|\brecord\b/.test(lower) || /个人纪录|個人紀錄|最佳成绩|最佳成績|奖牌|獎牌|成就/.test(normalized);
+    return hasRaceSignal && hasPrSignal;
+  }
 
   function activityIdFromHref(href) {
     if (!href) return "";
@@ -703,6 +731,86 @@
     return cancellableDelay(TIMING_PROFILE.postClickDwell);
   }
 
+  function randomCompliment() {
+    return COMPLIMENT_MESSAGES[randomInteger(0, COMPLIMENT_MESSAGES.length - 1)];
+  }
+
+  function visibleElement(element) {
+    if (!element || !(element instanceof Element)) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function findCommentTrigger(entry) {
+    if (!entry) return null;
+    const buttons = Array.from(entry.querySelectorAll("button, a"));
+    return buttons.find((element) => {
+      const text = normalizeDateText([element.getAttribute("aria-label"), element.getAttribute("title"), element.innerText, element.textContent].filter(Boolean).join(" ")).toLowerCase();
+      return visibleElement(element) && /\bcomment\b|评论|評論/.test(text);
+    }) || null;
+  }
+
+  function findCommentInput(entry) {
+    if (!entry) return null;
+    return Array.from(entry.querySelectorAll('textarea, input[type="text"], [contenteditable="true"]')).find((element) => visibleElement(element) && !isDisabled(element)) || null;
+  }
+
+  function setCommentInputValue(input, value) {
+    if (input.isContentEditable) {
+      input.textContent = value;
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
+      return;
+    }
+    input.focus();
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function findCommentSubmit(entry) {
+    if (!entry) return null;
+    const buttons = Array.from(entry.querySelectorAll('button, input[type="submit"]'));
+    return buttons.find((element) => {
+      const text = normalizeDateText([element.getAttribute("aria-label"), element.getAttribute("title"), element.value, element.innerText, element.textContent].filter(Boolean).join(" ")).toLowerCase();
+      return visibleElement(element) && !isDisabled(element) && (element.getAttribute("type") === "submit" || /\bpost\b|\bsend\b|\bcomment\b|发布|發佈|发送|發送|评论|評論/.test(text));
+    }) || null;
+  }
+
+  async function postComplimentOnEntry(entry, message) {
+    let input = findCommentInput(entry);
+    if (!input) {
+      const trigger = findCommentTrigger(entry);
+      if (!trigger) return false;
+      trigger.click();
+      await cancellableDelay(TIMING_PROFILE.feedLoadSettle);
+      input = findCommentInput(entry);
+    }
+    if (!input) return false;
+    setCommentInputValue(input, message);
+    await cancellableDelay(TIMING_PROFILE.preClickDwell);
+    const submit = findCommentSubmit(entry);
+    if (!submit) return false;
+    submit.click();
+    await cancellableDelay(TIMING_PROFILE.postClickDwell);
+    return true;
+  }
+
+  async function maybePostRacePrCompliment(button, metrics, complimentMode, commentCache, activityKey) {
+    if (!complimentMode || complimentMode.mode !== "race-pr") return;
+    if (!activityKey || !activityKey.startsWith("activity:")) { metrics.commentsSkipped += 1; return; }
+    if (commentCache && commentCache.entries.has(activityKey)) { metrics.commentsSkipped += 1; return; }
+    const entry = feedEntryForButton(button);
+    if (!entry || !entryLooksLikeRacePr(feedEntryTextForButton(button))) { metrics.commentsSkipped += 1; return; }
+    try {
+      const posted = await postComplimentOnEntry(entry, randomCompliment());
+      if (!posted) { metrics.commentsSkipped += 1; return; }
+      metrics.commentsPosted += 1;
+      await markActivityCommented(commentCache, activityKey);
+    } catch (_error) {
+      metrics.commentErrors += 1;
+    }
+  }
+
   function getCandidateButtons() {
     return Array.from(document.querySelectorAll(TARGET_SELECTOR)).filter((button) => {
       return isButtonElement(button) && !isDisabled(button) && !isKudosInspectorButton(button);
@@ -753,20 +861,26 @@
       autoRefreshPending: false, refreshes: 0, cappedByRefreshLimit: false,
       resumedAfterRefresh: false, resumeCount: 0,
       loadedCacheItems: 0, cachedActivitiesAdded: 0, cacheSize: 0,
+      commentsPosted: 0, commentsSkipped: 0, commentErrors: 0,
       hiddenDiscoveryBackoffs: 0, hiddenSince: null,
-      delayRangeMs: betweenTargets, dateRange, relationshipFilter: null,
+      delayRangeMs: betweenTargets, dateRange, relationshipFilter: null, complimentMode: { mode: "off" },
       startedAt: Date.now(), finishedAt: null, durationMs: null,
       isAutoMode: runState.isAutoMode, shouldAutoRefresh: false
     };
   }
 
-  async function processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist) {
+  async function processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist, complimentMode, commentCache) {
     if (runState.cancelRequested) return false;
     setCurrentStatus(metrics, "runStatusChecking", "Checking a visible kudos button.");
     const activityKey = activityKeyForButton(button);
     if (!button.isConnected) { metrics.skippedMissing += 1; return true; }
     if (isDisabled(button)) { metrics.skippedDisabled += 1; return true; }
-    if (isAlreadyClicked(button)) { metrics.skippedAlreadyClicked += 1; await markActivityHandled(handledCache, activityKey, metrics); return true; }
+    if (isAlreadyClicked(button)) {
+      metrics.skippedAlreadyClicked += 1;
+      await markActivityHandled(handledCache, activityKey, metrics);
+      await maybePostRacePrCompliment(button, metrics, complimentMode, commentCache, activityKey);
+      return true;
+    }
 
     const relationshipStatus = relationshipStatusForButton(button, relationshipFilter, connectionWhitelist);
     if (relationshipStatus !== "include") { metrics.skippedRelationship += 1; return true; }
@@ -779,7 +893,12 @@
     setCurrentStatus(metrics, "runStatusRechecking", "Re-checking the kudos button before clicking.");
     if (!button.isConnected) { metrics.skippedMissing += 1; return true; }
     if (isDisabled(button)) { metrics.skippedDisabled += 1; return true; }
-    if (isAlreadyClicked(button)) { metrics.skippedAlreadyClicked += 1; await markActivityHandled(handledCache, activityKey, metrics); return true; }
+    if (isAlreadyClicked(button)) {
+      metrics.skippedAlreadyClicked += 1;
+      await markActivityHandled(handledCache, activityKey, metrics);
+      await maybePostRacePrCompliment(button, metrics, complimentMode, commentCache, activityKey);
+      return true;
+    }
 
     const settledRelationshipStatus = relationshipStatusForButton(button, relationshipFilter, connectionWhitelist);
     if (settledRelationshipStatus !== "include") { metrics.skippedRelationship += 1; return true; }
@@ -792,6 +911,7 @@
     metrics.clicked += 1;
     setCurrentStatus(metrics, "runStatusClicked", "Clicked a kudos button.");
     await markActivityHandled(handledCache, activityKey, metrics);
+    await maybePostRacePrCompliment(button, metrics, complimentMode, commentCache, activityKey);
     return true;
   }
 
@@ -821,11 +941,12 @@
     return Boolean(record && record.pending) && Number.isFinite(requestedAt) && Date.now() - requestedAt <= AUTO_REFRESH_PROFILE.resumeTtlMs;
   }
 
-  function resumeMetrics(record, betweenTargets, dateRange, relationshipFilter) {
+  function resumeMetrics(record, betweenTargets, dateRange, relationshipFilter, complimentMode) {
     const restored = { ...createMetrics(0, betweenTargets, dateRange), ...(record && record.metrics ? record.metrics : {}) };
     restored.delayRangeMs = betweenTargets;
     restored.dateRange = dateRange;
     restored.relationshipFilter = relationshipFilter;
+    restored.complimentMode = complimentMode;
     restored.autoRefreshPending = false;
     restored.resumedAfterRefresh = true;
     restored.resumeCount = Number(restored.resumeCount || 0) + 1;
@@ -851,6 +972,9 @@
           endedAtDateBoundary: metrics.endedAtDateBoundary,
           finishedAt: metrics.finishedAt,
           durationMs: metrics.durationMs,
+          commentsPosted: metrics.commentsPosted,
+          commentsSkipped: metrics.commentsSkipped,
+          commentErrors: metrics.commentErrors,
           isAutoMode: metrics.isAutoMode
         }
       });
@@ -895,14 +1019,50 @@
     return true;
   }
 
-  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter) {
+  function createCommentCache(entries) { return { entries, pendingWrites: 0 }; }
+
+  function pruneCommentEntries(entries) {
+    if (entries.size <= ACTIVITY_CACHE_PROFILE.maxItems) return entries;
+    return new Map(Array.from(entries.entries()).sort((a, b) => a[1] - b[1]).slice(entries.size - ACTIVITY_CACHE_PROFILE.maxItems));
+  }
+
+  async function loadCommentCache() {
+    const raw = await storageLocalGet(COMMENT_CACHE_KEY);
+    const rawItems = raw && Array.isArray(raw.items) ? raw.items : [];
+    const entries = new Map();
+    rawItems.forEach((item) => {
+      const key = item && item.key ? String(item.key) : "";
+      const commentedAt = Number(item && item.commentedAt);
+      if (key) entries.set(key, Number.isFinite(commentedAt) ? commentedAt : Date.now());
+    });
+    return createCommentCache(pruneCommentEntries(entries));
+  }
+
+  async function persistCommentCache(commentCache) {
+    if (!commentCache) return false;
+    commentCache.entries = pruneCommentEntries(commentCache.entries);
+    commentCache.pendingWrites = 0;
+    return storageLocalSet({ [COMMENT_CACHE_KEY]: { version: 1, updatedAt: Date.now(), items: Array.from(commentCache.entries.entries()).map((e) => ({ key: e[0], commentedAt: e[1] })) } });
+  }
+
+  async function markActivityCommented(commentCache, activityKey) {
+    if (!commentCache || !activityKey || commentCache.entries.has(activityKey)) return false;
+    commentCache.entries.set(activityKey, Date.now());
+    commentCache.pendingWrites += 1;
+    if (commentCache.pendingWrites >= ACTIVITY_CACHE_PROFILE.flushEvery) await persistCommentCache(commentCache);
+    return true;
+  }
+
+  async function executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter, complimentMode) {
     let idleScrollAttempts = 0;
     let pageTouchedFeed = false;
     let handledCache = null;
+    let commentCache = null;
     let connectionWhitelist = null;
 
     try {
       handledCache = await loadHandledActivityCache(metrics);
+      commentCache = await loadCommentCache();
       if (relationshipFilter && relationshipFilter.mode === "connected") {
         connectionWhitelist = await getOrBuildConnectionWhitelist();
         if (!connectionWhitelist) {
@@ -954,7 +1114,7 @@
         if (runState.cancelRequested) break;
 
         try {
-          const processResult = await processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist);
+          const processResult = await processButton(button, metrics, dateRange, handledCache, relationshipFilter, connectionWhitelist, complimentMode, commentCache);
           if (processResult === "date-boundary") {
             metrics.shouldAutoRefresh = runState.isAutoMode;
             break;
@@ -969,6 +1129,7 @@
       metrics.errorMessage = error && error.message ? error.message : "Kudos sequence failed.";
     } finally {
       if (handledCache) await persistHandledActivityCache(handledCache, metrics);
+      if (commentCache) await persistCommentCache(commentCache);
       const willAutoRefresh = metrics.shouldAutoRefresh && runState.isAutoMode && Number(metrics.refreshes || 0) < MAX_AUTO_REFRESHES;
       if (metrics.shouldAutoRefresh && runState.isAutoMode && !willAutoRefresh) metrics.cappedByRefreshLimit = true;
       if (willAutoRefresh) metrics.autoRefreshPending = true;
@@ -980,7 +1141,8 @@
         const refreshed = await requestAutoRefresh({
           betweenTargets: metrics.delayRangeMs,
           dateRange,
-          relationshipFilter
+          relationshipFilter,
+          complimentMode: complimentMode ? complimentMode.mode : "off"
         }, metrics);
         if (!refreshed) {
           await clearStoredResumeRun();
@@ -1008,14 +1170,16 @@
     const betweenTargets = normalizeBetweenTargetsRange(settings);
     const dateRange = normalizeDateRange(settings);
     const relationshipFilter = normalizeRelationshipFilter(settings);
-    const metrics = resumeRecord ? resumeMetrics(resumeRecord, betweenTargets, dateRange, relationshipFilter) : createMetrics(0, betweenTargets, dateRange);
+    const complimentMode = normalizeComplimentMode(settings);
+    const metrics = resumeRecord ? resumeMetrics(resumeRecord, betweenTargets, dateRange, relationshipFilter, complimentMode) : createMetrics(0, betweenTargets, dateRange);
     const paceState = createPaceState();
     const processedButtons = new WeakSet();
     paceState.betweenTargets = betweenTargets;
     metrics.relationshipFilter = relationshipFilter;
+    metrics.complimentMode = complimentMode;
     runState.activeMetrics = metrics;
 
-    executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter);
+    executeKudosSequence(metrics, paceState, processedButtons, dateRange, relationshipFilter, complimentMode);
 
     return { ok: true, started: true, message: "Kudos sequence started.", state: statusResult().state, metrics };
   }
@@ -1055,6 +1219,7 @@
         relationshipFilter: {
           mode: settings.relationshipFilterMode || "connected"
         },
+        complimentMode: settings.complimentMode || "off",
         autoMode: true
       };
     } catch (_error) { return null; }

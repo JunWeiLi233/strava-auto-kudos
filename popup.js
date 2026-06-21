@@ -17,7 +17,8 @@
     dateRangeMode: "any",
     dateRangeValue: 7,
     dateRangeUnit: "days",
-    relationshipFilterMode: "connected"
+    relationshipFilterMode: "connected",
+    complimentMode: "off"
   });
   const DELAY_LIMIT_SECONDS = Object.freeze({ min: 0.8, max: 120 });
   const DATE_RANGE_UNITS = Object.freeze(["days", "months", "years"]);
@@ -48,6 +49,10 @@
       relationshipFilterLabel: "Filter",
       relationshipConnectedOption: "Following / follows me only",
       relationshipAnyOption: "Any visible activity",
+      complimentsLegend: "Compliments",
+      complimentModeLabel: "Mode",
+      complimentOffOption: "Off",
+      complimentRacePrOption: "Race PR only",
       daysOption: "days",
       monthsOption: "months",
       yearsOption: "years",
@@ -64,9 +69,9 @@
       settingsSaved: "Settings saved.",
       invalidSchedule: "Schedule interval must be between 5 and 1440 minutes.",
       startedStatus: "Kudos started. Keep a Strava tab open.",
-      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
-      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
-      runningProgressStatus: "{status} Clicked {clicked}; scanned {scanned}; skipped {skipped}; scrolls {scrolls}; waits {waits}; refreshes {refreshes}.",
+      stoppedSummary: "Stopped after {clicked} {clickWord}; scanned {scanned}, skipped {skipped}; comments {commentsPosted}/{commentsSkipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
+      clickedSummary: "Clicked {clicked} of {scanned} {buttonWord}; skipped {skipped}; comments {commentsPosted}/{commentsSkipped}; relationship skips {relationship}; cache skips {cached}, refreshes {refreshes}.",
+      runningProgressStatus: "{status} Clicked {clicked}; scanned {scanned}; skipped {skipped}; comments {commentsPosted}/{commentsSkipped}; scrolls {scrolls}; waits {waits}; refreshes {refreshes}.",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "button",
@@ -121,6 +126,10 @@
       relationshipFilterLabel: "过滤",
       relationshipConnectedOption: "仅关注 / 关注我的人",
       relationshipAnyOption: "任何可见动态",
+      complimentsLegend: "夸奖评论",
+      complimentModeLabel: "模式",
+      complimentOffOption: "关闭",
+      complimentRacePrOption: "仅比赛 PR",
       daysOption: "天",
       monthsOption: "个月",
       yearsOption: "年",
@@ -137,9 +146,9 @@
       settingsSaved: "设置已保存。",
       invalidSchedule: "计划间隔必须在 5 到 1440 分钟之间。",
       startedStatus: "Kudos 已开始。保持 Strava 标签页打开。",
-      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
-      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
-      runningProgressStatus: "{status} 已点击 {clicked} 次；扫描 {scanned} 个；跳过 {skipped} 个；滚动 {scrolls} 次；等待 {waits} 次；刷新 {refreshes} 次。",
+      stoppedSummary: "已停止：点击 {clicked} 次；扫描 {scanned} 个，跳过 {skipped} 个；评论 {commentsPosted}/{commentsSkipped}；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
+      clickedSummary: "已点击 {clicked}/{scanned} 个按钮；跳过 {skipped} 个；评论 {commentsPosted}/{commentsSkipped}；关系跳过 {relationship} 个，缓存跳过 {cached} 个，刷新 {refreshes} 次。",
+      runningProgressStatus: "{status} 已点击 {clicked} 次；扫描 {scanned} 个；跳过 {skipped} 个；评论 {commentsPosted}/{commentsSkipped}；滚动 {scrolls} 次；等待 {waits} 次；刷新 {refreshes} 次。",
       clickSingular: "click",
       clickPlural: "clicks",
       buttonSingular: "按钮",
@@ -186,6 +195,7 @@
   const dateRangeValue = document.getElementById("dateRangeValue");
   const dateRangeUnit = document.getElementById("dateRangeUnit");
   const relationshipFilterMode = document.getElementById("relationshipFilterMode");
+  const complimentModeSelect = document.getElementById("complimentModeSelect");
   const statusText = document.getElementById("status");
   const lastRunEl = document.getElementById("lastRun");
   let currentLanguage = loadLanguage();
@@ -329,6 +339,7 @@
     dateRangeValue.value = String(s.dateRangeValue);
     dateRangeUnit.value = s.dateRangeUnit;
     relationshipFilterMode.value = s.relationshipFilterMode;
+    complimentModeSelect.value = s.complimentMode === "race-pr" ? "race-pr" : "off";
     setDateRangeControlsEnabled();
     updateLastRunDisplay();
   }
@@ -365,7 +376,8 @@
       dateRangeMode: drMode,
       dateRangeValue: drValue,
       dateRangeUnit: drUnit,
-      relationshipFilterMode: relMode
+      relationshipFilterMode: relMode,
+      complimentMode: complimentModeSelect.value === "race-pr" ? "race-pr" : "off"
     };
     await saveAllSettings(settings);
     return settings;
@@ -386,6 +398,7 @@
       relationshipFilter: {
         mode: s.relationshipFilterMode || "connected"
       },
+      complimentMode: s.complimentMode || "off",
       autoMode: true
     };
   }
@@ -433,9 +446,11 @@
     const cached = Number(metrics.skippedCached || 0);
     const relationship = Number(metrics.skippedRelationship || 0);
     const refreshes = Number(metrics.refreshes || 0);
+    const commentsPosted = Number(metrics.commentsPosted || 0);
+    const commentsSkipped = Number(metrics.commentsSkipped || 0);
 
     if (metrics.stopped) {
-      return { key: "stoppedSummary", params: { clicked, clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"), scanned, skipped, relationship, cached, refreshes } };
+      return { key: "stoppedSummary", params: { clicked, clickWord: clicked === 1 ? t("clickSingular") : t("clickPlural"), scanned, skipped, relationship, cached, refreshes, commentsPosted, commentsSkipped } };
     }
     if (metrics.endedAtRecentActivityBoundary) {
       return { key: "recentActivityBoundaryStatus" };
@@ -443,7 +458,7 @@
     if (metrics.endedAtDateBoundary) {
       return { key: "dateBoundaryStatus" };
     }
-    return { key: "clickedSummary", params: { clicked, scanned, buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"), skipped, relationship, cached, refreshes } };
+    return { key: "clickedSummary", params: { clicked, scanned, buttonWord: scanned === 1 ? t("buttonSingular") : t("buttonPlural"), skipped, relationship, cached, refreshes, commentsPosted, commentsSkipped } };
   }
 
   function runningStatusDescriptor(metrics) {
@@ -457,7 +472,9 @@
         skipped: skippedCount(m),
         scrolls: Number(m.discoveryScrolls || 0),
         waits: Number(m.idleDiscoveryAttempts || 0) + Number(m.hiddenDiscoveryBackoffs || 0),
-        refreshes: Number(m.refreshes || 0)
+        refreshes: Number(m.refreshes || 0),
+        commentsPosted: Number(m.commentsPosted || 0),
+        commentsSkipped: Number(m.commentsSkipped || 0)
       }
     };
   }
@@ -609,6 +626,7 @@
   dateRangeValue.addEventListener("change", onSettingChanged);
   dateRangeUnit.addEventListener("change", onSettingChanged);
   relationshipFilterMode.addEventListener("change", onSettingChanged);
+  complimentModeSelect.addEventListener("change", onSettingChanged);
   runNowButton.addEventListener("click", runNow);
   stopButton.addEventListener("click", stopRun);
   languageButton.addEventListener("click", toggleLanguage);

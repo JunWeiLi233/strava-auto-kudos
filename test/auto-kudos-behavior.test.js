@@ -30,6 +30,31 @@ test("background and popup started runs tell the content script to allow refresh
   assert.match(popupSource, /autoMode:\s*true/);
 });
 
+test("popup and background propagate race PR compliment mode", () => {
+  const popupHtml = fs.readFileSync(path.join(root, "popup.html"), "utf8");
+  const backgroundSource = fs.readFileSync(path.join(root, "background.js"), "utf8");
+  assert.match(popupHtml, /complimentModeSelect/);
+  assert.match(popupHtml, /value="race-pr"/);
+  assert.match(popupSource, /complimentMode:\s*"off"/);
+  assert.match(popupSource, /complimentModeSelect\.value/);
+  assert.match(popupSource, /complimentMode:\s*s\.complimentMode/);
+  assert.match(backgroundSource, /complimentMode:\s*s\.complimentMode \|\| "off"/);
+  assert.match(backgroundSource, /complimentMode:\s*settings\.complimentMode \|\| "off"/);
+});
+
+test("race PR compliments use detection gates, cache, and metrics", () => {
+  assert.match(contentSource, /COMMENT_CACHE_KEY/);
+  assert.match(contentSource, /COMPLIMENT_MESSAGES/);
+  assert.match(contentSource, /function normalizeComplimentMode/);
+  assert.match(contentSource, /function entryLooksLikeRacePr/);
+  assert.match(contentSource, /hasRaceSignal && hasPrSignal/);
+  assert.match(contentSource, /commentsPosted/);
+  assert.match(contentSource, /commentsSkipped/);
+  assert.match(contentSource, /commentErrors/);
+  assert.match(contentSource, /commentCache\.entries\.has\(activityKey\)/);
+  assert.match(contentSource, /markActivityCommented/);
+});
+
 test("date filter boundary ends the active run instead of being treated as a normal skip", () => {
   assert.match(contentSource, /endedAtDateBoundary/);
   assert.match(contentSource, /markDateRangeBoundary/);
@@ -55,6 +80,8 @@ test("popup renders detailed live progress instead of a generic working status",
   assert.match(popupSource, /runningProgressStatus/);
   assert.match(popupSource, /runningStatusDescriptor/);
   assert.match(popupSource, /currentStatusKey/);
+  assert.match(popupSource, /commentsPosted/);
+  assert.match(popupSource, /commentsSkipped/);
   assert.match(popupSource, /setStatusDescriptor\(runningStatusDescriptor\(metrics\), "busy"\)/);
 });
 

@@ -151,6 +151,7 @@ git pull
 - Lets the user set the minimum and maximum delay between kudos actions from the popup.
 - Lets the user limit automation to activities from **Any time** or **Last N days/months/years**.
 - Lets the user limit kudos to relationship-safe feed entries, skipping visible suggested, promoted, advertised, or followable stranger entries.
+- Adds an optional **Compliments** mode that posts a short random comment only on activities that look like race PRs.
 - Skips out-of-range activities when a date filter is active.
 - Skips activities with unreadable dates when a date filter is active, so the extension does not accidentally give kudos outside the selected range.
 - Uses randomized timing instead of static pauses:
@@ -308,16 +309,20 @@ Then reload the extension from `chrome://extensions`.
 7. Set **Relationship** if you want to change who gets kudos:
    - **Following / follows me only** is the default. It processes entries that look like people you follow or entries where the visible text says the athlete follows you. It skips visible Follow, suggested, promoted, sponsored, or ad-like stranger entries.
    - **Any visible activity** disables this relationship filter.
-8. Press **Give kudos**.
-9. If the active tab is not on Strava, the extension opens the Strava dashboard first.
-10. If Strava appears logged out, the extension warns you to log in before running.
-11. Leave the Strava tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
-12. The extension remembers handled activities locally. On future runs, activities already given kudos, or confirmed as already clicked, are skipped without scrolling through the whole old feed again.
-13. After each loaded feed batch is complete, the extension scrolls down, waits for Strava to load more activities, and scans again instead of stopping on an empty batch.
-14. If the **Activity date** filter is active, the run stops when it reaches the first activity outside the selected date range.
-15. When Strava shows "No more recent activities. To view your full activity history, visit your profile or training calendar.", the extension stops cleanly instead of repeating more discovery scrolls.
-16. After the popup says the run started, you can close the popup and use another Chrome tab or window. If Chrome marks the Strava tab as hidden, the extension keeps processing loaded kudos, asks Chrome not to auto-discard the run tab, and retries feed discovery instead of ending.
-17. To interrupt an active run, open the popup again and press **Stop**.
+8. Set **Compliments** if you want automatic comments:
+   - **Off** is the default.
+   - **Race PR only** posts one short random compliment only when the visible feed entry looks like both a race and a PR or best-effort achievement.
+9. Press **Give kudos**.
+10. If the active tab is not on Strava, the extension opens the Strava dashboard first.
+11. If Strava appears logged out, the extension warns you to log in before running.
+12. Leave the Strava tab open while the extension scrolls through feed items, processes available kudos buttons, and looks for newly loaded items after the current batch ends.
+13. The extension remembers handled activities locally. On future runs, activities already given kudos, or confirmed as already clicked, are skipped without scrolling through the whole old feed again.
+14. The extension also remembers activities it commented on, so refreshes and later runs do not post duplicate compliments.
+15. After each loaded feed batch is complete, the extension scrolls down, waits for Strava to load more activities, and scans again instead of stopping on an empty batch.
+16. If the **Activity date** filter is active, the run stops when it reaches the first activity outside the selected date range.
+17. When Strava shows "No more recent activities. To view your full activity history, visit your profile or training calendar.", the extension stops cleanly instead of repeating more discovery scrolls.
+18. After the popup says the run started, you can close the popup and use another Chrome tab or window. If Chrome marks the Strava tab as hidden, the extension keeps processing loaded kudos, asks Chrome not to auto-discard the run tab, and retries feed discovery instead of ending.
+19. To interrupt an active run, open the popup again and press **Stop**.
 
 Do not close the actual Strava page tab. If that tab is closed, Chrome destroys the page and its content script, so no extension can keep clicking that page. If Strava was already open before you installed or reloaded the extension, refresh the Strava tab once so Chrome injects the content script.
 
@@ -354,23 +359,25 @@ The content script returns a start confirmation immediately, then continues the 
 4. Applies the relationship filter. In the default mode, it allows entries with follower signals like "follows you", allows normal feed entries without stranger signals, and skips visible Follow, suggested, promoted, sponsored, or ad-like entries.
 5. If the user enabled **Last N days/months/years**, finds the closest Strava feed entry, reads `time[data-testid="date_at_time"]`, and stops the run when it reaches the first activity outside the selected range.
 6. If the date filter is active and a feed entry date cannot be parsed, skips that entry instead of clicking it.
-7. Checks each button for already-clicked signals:
+7. If **Compliments** is set to **Race PR only**, checks the same feed entry for race signals and PR or best-effort signals before attempting any comment.
+8. Checks each button for already-clicked signals:
    - `aria-pressed`
    - `aria-selected`
    - button labels and titles
    - state-like data attributes
    - class names such as active, selected, filled, or kudoed
    - SVG fill/color signals that match Strava orange
-8. Moves toward the candidate with uneven wheel-like scroll steps and occasional mid-scroll hesitation.
-9. Waits for a randomized settle period.
-10. Re-checks that the button is still connected, enabled, unclicked, relationship-allowed, and still inside the selected date range.
-11. Dispatches pointer and mouse events around the native click.
-12. Stores successfully clicked or already-clicked activity keys in `chrome.storage.local`.
-13. Waits a randomized delay before moving to the next target.
-14. If Chrome reports the Strava page is hidden, keeps the run alive and backs off failed discovery attempts without treating them as completion.
-15. When the current loaded feed batch has no uncached kudos buttons left, scrolls farther down the dashboard, waits for Strava to load more feed items, and scans again.
-16. If the **Activity date** filter is active and the next visible activity is outside the selected range, records that date boundary and ends the sequence.
-17. If Strava displays the Chinese or English "no more recent activities" boundary, records that stop reason and ends the sequence.
+9. Moves toward the candidate with uneven wheel-like scroll steps and occasional mid-scroll hesitation.
+10. Waits for a randomized settle period.
+11. Re-checks that the button is still connected, enabled, unclicked, relationship-allowed, and still inside the selected date range.
+12. Dispatches pointer and mouse events around the native click.
+13. Stores successfully clicked or already-clicked activity keys in `chrome.storage.local`.
+14. If compliments are enabled and the activity qualifies, finds the visible comment UI, posts one built-in short compliment, and stores the activity in a separate local comment cache.
+15. Waits a randomized delay before moving to the next target.
+16. If Chrome reports the Strava page is hidden, keeps the run alive and backs off failed discovery attempts without treating them as completion.
+17. When the current loaded feed batch has no uncached kudos buttons left, scrolls farther down the dashboard, waits for Strava to load more feed items, and scans again.
+18. If the **Activity date** filter is active and the next visible activity is outside the selected range, records that date boundary and ends the sequence.
+19. If Strava displays the Chinese or English "no more recent activities" boundary, records that stop reason and ends the sequence.
 
 ## Timing Profile
 

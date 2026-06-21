@@ -173,7 +173,10 @@
         scanned: Number(metrics.scanned || 0),
         stopped: Boolean(metrics.stopped),
         endedAtRecentActivityBoundary: Boolean(metrics.endedAtRecentActivityBoundary),
-        endedAtDateBoundary: Boolean(metrics.endedAtDateBoundary)
+        endedAtDateBoundary: Boolean(metrics.endedAtDateBoundary),
+        commentsPosted: Number(metrics.commentsPosted || 0),
+        commentsSkipped: Number(metrics.commentsSkipped || 0),
+        commentErrors: Number(metrics.commentErrors || 0)
       }
     });
   }
@@ -336,6 +339,7 @@
         relationshipFilter: {
           mode: settings.relationshipFilterMode || "connected"
         },
+        complimentMode: settings.complimentMode || "off",
         autoMode: true
       });
     } catch (_error) {}
@@ -355,6 +359,7 @@
             betweenTargets: { min: Math.round((s.minDelaySeconds || 1.7) * 1000), max: Math.round((s.maxDelaySeconds || 4.6) * 1000) },
             dateRange: { mode: s.dateRangeMode || "any", value: s.dateRangeValue || 7, unit: s.dateRangeUnit || "days" },
             relationshipFilter: { mode: s.relationshipFilterMode || "connected" },
+            complimentMode: s.complimentMode || "off",
             autoMode: true
           };
           await sendContentMessageWithInjection(tab.id, ACTION_RUN_KUDOS, runSettings);
@@ -365,6 +370,7 @@
         betweenTargets: { min: Math.round((s.minDelaySeconds || 1.7) * 1000), max: Math.round((s.maxDelaySeconds || 4.6) * 1000) },
         dateRange: { mode: s.dateRangeMode || "any", value: s.dateRangeValue || 7, unit: s.dateRangeUnit || "days" },
         relationshipFilter: { mode: s.relationshipFilterMode || "connected" },
+        complimentMode: s.complimentMode || "off",
         autoMode: true
       });
     }

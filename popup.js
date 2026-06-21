@@ -386,7 +386,7 @@
       relationshipFilter: {
         mode: s.relationshipFilterMode || "connected"
       },
-      autoMode: Boolean(s.autoMode)
+      autoMode: true
     };
   }
 

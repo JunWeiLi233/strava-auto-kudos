@@ -39,6 +39,7 @@
   const ACTIVITY_CACHE_PROFILE = Object.freeze({ maxItems: 2500, flushEvery: 5 });
   const AUTO_REFRESH_PROFILE = Object.freeze({ resumeTtlMs: 30 * 60 * 1000, resumeSettle: { min: 1600, max: 3200 } });
   const MAX_IDLE_DISCOVERY_ATTEMPTS = 8;
+  const MAX_AUTO_REFRESHES = 3;
 
   const runState = {
     running: false,
@@ -968,7 +969,8 @@
       metrics.errorMessage = error && error.message ? error.message : "Kudos sequence failed.";
     } finally {
       if (handledCache) await persistHandledActivityCache(handledCache, metrics);
-      const willAutoRefresh = metrics.shouldAutoRefresh && runState.isAutoMode;
+      const willAutoRefresh = metrics.shouldAutoRefresh && runState.isAutoMode && Number(metrics.refreshes || 0) < MAX_AUTO_REFRESHES;
+      if (metrics.shouldAutoRefresh && runState.isAutoMode && !willAutoRefresh) metrics.cappedByRefreshLimit = true;
       if (willAutoRefresh) metrics.autoRefreshPending = true;
       await finalizeRunMetrics(metrics);
 

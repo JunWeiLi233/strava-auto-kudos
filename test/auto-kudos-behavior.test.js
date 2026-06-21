@@ -7,9 +7,10 @@ const root = path.resolve(__dirname, "..");
 const contentSource = fs.readFileSync(path.join(root, "content.js"), "utf8");
 const popupSource = fs.readFileSync(path.join(root, "popup.js"), "utf8");
 
-test("auto refresh persists resume state and reloads the dashboard", () => {
-  assert.equal(contentSource.includes("maxNoNewWorkRefreshes"), false);
-  assert.equal(contentSource.includes("refreshesWithoutNewWork"), false);
+test("auto refresh persists resume state and reloads after idle discovery limit", () => {
+  assert.match(contentSource, /MAX_IDLE_DISCOVERY_ATTEMPTS/);
+  assert.match(contentSource, /idleScrollAttempts >= MAX_IDLE_DISCOVERY_ATTEMPTS/);
+  assert.match(contentSource, /metrics\.shouldAutoRefresh = runState\.isAutoMode/);
   assert.equal(contentSource.includes("maxProcessedButtons"), false);
   assert.match(contentSource, /requestAutoRefresh/);
   assert.match(contentSource, /autoRefreshPending\s*=\s*true/);

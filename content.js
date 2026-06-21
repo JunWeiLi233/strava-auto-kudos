@@ -38,6 +38,7 @@
   const BACKGROUND_DISCOVERY_PROFILE = Object.freeze({ hiddenDiscoveryBackoff: { min: 2500, max: 5500 } });
   const ACTIVITY_CACHE_PROFILE = Object.freeze({ maxItems: 2500, flushEvery: 5 });
   const AUTO_REFRESH_PROFILE = Object.freeze({ resumeTtlMs: 30 * 60 * 1000, resumeSettle: { min: 1600, max: 3200 } });
+  const MAX_IDLE_DISCOVERY_ATTEMPTS = 8;
 
   const runState = {
     running: false,
@@ -933,6 +934,11 @@
           if (isPageHidden()) { setCurrentStatus(metrics, "runStatusHiddenWaiting", "Strava tab is hidden; waiting before the next discovery scroll."); if (!(await hiddenDiscoveryBackoff(metrics))) break; continue; }
           idleScrollAttempts += 1;
           metrics.idleDiscoveryAttempts = idleScrollAttempts;
+          if (idleScrollAttempts >= MAX_IDLE_DISCOVERY_ATTEMPTS) {
+            markRecentActivityBoundary(metrics);
+            metrics.shouldAutoRefresh = runState.isAutoMode;
+            break;
+          }
           setCurrentStatus(metrics, "runStatusWaiting", "Waiting briefly for Strava to fetch more activities.");
           if (!(await cancellableDelay(TIMING_PROFILE.feedLoadSettle))) break;
           continue;
